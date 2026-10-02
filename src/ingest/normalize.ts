@@ -52,7 +52,12 @@ export function legacyIdentifier(accountId: string, date: string, description: s
 export function normalizeTransactions(accountId: string, txns: ScrapedTransaction[]): NormalizedTransaction[] {
   const seen = new Map<string, number>();
 
-  return txns.map(txn => {
+  // Mizrahi's pending rows with income only come back with a NaN amount (upstream TODO); the row
+  // arrives again, with its amount, once the bank posts it
+  const usable = txns.filter(t => Number.isFinite(t.originalAmount));
+  if (usable.length < txns.length) console.warn(`  skipped ${txns.length - usable.length} row(s) with no amount`);
+
+  return usable.map(txn => {
     const originalCurrency = txn.originalCurrency || 'ILS';
     const chargedAmount = txn.chargedAmount ?? txn.originalAmount;
     const bankIdentifier = txn.identifier != null && String(txn.identifier).trim() !== ''
