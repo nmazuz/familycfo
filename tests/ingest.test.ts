@@ -26,6 +26,11 @@ describe('normalizeTransactions identity', () => {
     expect(a.identifier).toBe(legacyIdentifier('isracard:1', a.date, 'ארומה', -18, 'ILS'));
   });
 
+  it('skips rows whose amount is not a number (Mizrahi pending income rows)', () => {
+    const rows = normalizeTransactions('mizrahi:1', [scraped({ originalAmount: NaN, chargedAmount: NaN }), scraped()]);
+    expect(rows).toHaveLength(1);
+  });
+
   it('uses the bank reference plus installment number when available', () => {
     const one = normalizeTransactions('max:1', [scraped({ identifier: 'A1', installments: { number: 1, total: 3 } })])[0];
     const two = normalizeTransactions('max:1', [scraped({ identifier: 'A1', installments: { number: 2, total: 3 } })])[0];
