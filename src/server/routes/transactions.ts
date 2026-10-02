@@ -17,6 +17,29 @@ interface TxQuery {
 
 const EDITABLE = ['category_id', 'member_id', 'business_id', 'business_share_pct', 'kind', 'fixed_override', 'excluded', 'notes'];
 
+/** True for a real YYYY-MM-DD calendar date (rejects 2026-02-31, 2026-13-01, 2026-00-10). */
+export function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const year = Number(value.slice(0, 4));
+  if (year < 1900 || year > 2200) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+/** Add whole months to a YYYY-MM-DD date; a day past the end of the target month clamps to its last day (Jan 31 + 1 → Feb 28/29). */
+export function addMonthsClamped(date: string, months: number): string {
+  if (!isCalendarDate(date) || !Number.isInteger(months) || Math.abs(months) > 120) {
+    throw new RangeError('Expected a real date (1900-2200) and an integer month offset between -120 and 120');
+  }
+  const [y, m, day] = date.split('-').map(Number);
+  const total = y * 12 + (m - 1) + months;
+  const ty = Math.floor(total / 12), tm = total % 12;
+  const last = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate();
+  const result = `${String(ty).padStart(4, '0')}-${String(tm + 1).padStart(2, '0')}-${String(Math.min(day, last)).padStart(2, '0')}`;
+  if (!isCalendarDate(result)) throw new RangeError('Postponed date is outside the supported range');
+  return result;
+}
+
 export function parseFilter(q: TxQuery) {
   return {
     memberId: q.member ? Number(q.member) : undefined,
@@ -108,7 +131,7 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
   const manualValues = (b: ManualBody) => {
     const description = String(b.description ?? '').trim();
     const amount = Math.abs(Number(b.amount));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date ?? '') || !description || !(amount > 0)) return null;
+    if (!isCalendarDate(b.date) || !description || !(amount > 0)) return null;
     // stored like scraped rows (ISO); noon in Israel so the local date never shifts
     const iso = new Date(`${b.date}T12:00:00+03:00`).toISOString();
     const signed = b.kind === 'income' ? amount : -amount;
@@ -165,7 +188,7 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
     const description = String(b.description ?? '').trim();
     const amount = Math.abs(Number(b.amount));
     const installments = Math.max(1, Math.min(60, Math.round(Number(b.installments ?? 1)) || 1));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date ?? '') || !description || !(amount > 0) || !b.accountId) return null;
+    if (!isCalendarDate(b.date) || !description || !(amount > 0) || !b.accountId) return null;
     return { description, amount, date: b.date, account_id: b.accountId, installments, match_pattern: String(b.matchPattern ?? '').trim() || null,
       category_id: b.categoryId ?? null, member_id: b.memberId ?? null, tag_ids: JSON.stringify(b.tagIds ?? []), notes: String(b.notes ?? '').trim() || null };
   };
@@ -203,18 +226,29 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
   });
 
   /** status changes: cancel, back to planned (undo a match), postpone by N months */
-  app.patch('/api/planned/:id', async req => {
+  app.patch('/api/planned/:id', async (req, reply) => {
     const id = Number((req.params as { id: string }).id);
-    const b = req.body as { status?: PlannedItem['status']; postponeMonths?: number };
-    if (b.status === 'cancelled') db.prepare(`UPDATE planned_items SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
-    if (b.status === 'planned') unlinkPlanned(db, id);
-    if (b.postponeMonths) {
-      const date = db.prepare(`SELECT date FROM planned_items WHERE id = ?`).pluck().get(id) as string;
-      const d = new Date(`${date}T12:00:00Z`);
-      d.setUTCMonth(d.getUTCMonth() + b.postponeMonths);
-      db.prepare(`UPDATE planned_items SET date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(d.toISOString().slice(0, 10), id);
+    const b = req.body as { status?: PlannedItem['status']; postponeMonths?: number } | null;
+    if (!Number.isSafeInteger(id) || id <= 0 || !b || typeof b !== 'object' || Array.isArray(b)
+      || (b.status !== undefined && b.status !== 'cancelled' && b.status !== 'planned')
+      || (b.postponeMonths !== undefined && (!Number.isInteger(b.postponeMonths) || Math.abs(b.postponeMonths) > 120))
+      || (b.status === undefined && b.postponeMonths === undefined)) {
+      return reply.code(400).send({ error: 'Invalid planned item change; postponeMonths must be an integer between -120 and 120' });
     }
-    if (b.status !== 'cancelled') afterPlannedChange();
+    const item = db.prepare('SELECT date FROM planned_items WHERE id = ?').get(id) as { date: string } | undefined;
+    if (!item) return reply.code(404).send({ error: 'Planned item not found' });
+    let date: string | undefined;
+    if (b.postponeMonths !== undefined) {
+      try { date = addMonthsClamped(item.date, b.postponeMonths); }
+      catch { return reply.code(400).send({ error: 'Invalid date or postponed date outside 1900-2200' }); }
+    }
+    // Validate the entire request before any write, then change status/date atomically.
+    db.transaction(() => {
+      if (b.status === 'cancelled') db.prepare(`UPDATE planned_items SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(id);
+      if (b.status === 'planned') unlinkPlanned(db, id);
+      if (date !== undefined) db.prepare(`UPDATE planned_items SET date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(date, id);
+      if (b.status !== 'cancelled') afterPlannedChange();
+    })();
     return { ok: true };
   });
 

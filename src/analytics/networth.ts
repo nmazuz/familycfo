@@ -129,12 +129,12 @@ function netWorthHistory(db: DB): { date: string; netWorth: number }[] {
     `).pluck().get(end) as number;
     const assets = (db.prepare(`
       SELECT s.value, s.currency, s.date FROM asset_snapshots s
-      WHERE s.id IN (SELECT MAX(id) FROM asset_snapshots WHERE date <= ? GROUP BY asset_id)
+      WHERE s.id = (SELECT id FROM asset_snapshots WHERE asset_id = s.asset_id AND date <= ? ORDER BY date DESC, id DESC LIMIT 1)
     `).all(end) as { value: number; currency: string; date: string }[])
       .reduce((sum, s) => sum + toIls(db, s.value, s.currency, s.date), 0);
     const debts = db.prepare(`
-      SELECT COALESCE(SUM(balance), 0) FROM liability_snapshots
-      WHERE id IN (SELECT MAX(id) FROM liability_snapshots WHERE date <= ? GROUP BY liability_id)
+      SELECT COALESCE(SUM(balance), 0) FROM liability_snapshots s
+      WHERE s.id = (SELECT id FROM liability_snapshots WHERE liability_id = s.liability_id AND date <= ? ORDER BY date DESC, id DESC LIMIT 1)
     `).pluck().get(end) as number;
     return { date: m, netWorth: round(bank + assets + stocksOn(end) - debts) };
   });

@@ -633,6 +633,22 @@ export const migrations: Migration[] = [
       for (const [from, to] of Object.entries(SCRAPER_CATEGORY_ALIASES)) alias.run(from, to);
     },
   },
+  {
+    version: 15,
+    name: 'deposits: unknown salary month is unique too',
+    up(db) {
+      // Archive every superseded row before deduplication, in the runner's transaction.
+      // NULL and empty salary months share the new key; latest import (highest id) wins.
+      const superseded = `id NOT IN (SELECT MAX(id) FROM asset_deposits
+        GROUP BY asset_id, value_date, COALESCE(salary_month, ''))`;
+      db.exec('CREATE TABLE asset_deposits_dedup_backup_v15 AS SELECT * FROM asset_deposits WHERE 0');
+      const archived = db.prepare(`INSERT INTO asset_deposits_dedup_backup_v15 SELECT * FROM asset_deposits WHERE ${superseded}`).run().changes;
+      const removed = db.prepare(`DELETE FROM asset_deposits WHERE ${superseded}`).run().changes;
+      db.exec(`CREATE UNIQUE INDEX idx_asset_deposits_unique ON asset_deposits (asset_id, value_date, COALESCE(salary_month, ''))`);
+      if (removed > 0) console.info(`Migration 15: archived ${archived} superseded deposit rows in asset_deposits_dedup_backup_v15; removed ${removed} duplicates`);
+
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';

@@ -9,7 +9,12 @@ npm run scrape     # Scrape all banks once, then run the pipeline (SCRAPE_ONLY=i
 npm run dev        # Household app: API (127.0.0.1:4310) + web UI (http://127.0.0.1:5180)
 npm run pipeline   # Re-run classification / recurring / suggestions / alerts without scraping
 npm run migrate    # Apply DB migrations (also runs automatically on open)
-npm test           # Vitest unit tests (in-memory SQLite)
+npm test           # Vitest unit + integration + subprocess tests (synthetic data)
+npm run test:coverage # Full source coverage with regression gates
+npm run typecheck:tests # Typecheck tests and config
+npm run check      # Unit/integration, coverage and all typechecks (not browser E2E)
+npx playwright install chromium # One-time browser installation
+npm run test:e2e   # Serial Chromium E2E, disposable SQLite; requires free ports 14310/15180
 npm run typecheck  # API typecheck; web: npm --prefix web run typecheck
 npm run demo       # Build demo.db with made-up data; npm run dev:demo runs the app on it
 ```

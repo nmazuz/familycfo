@@ -70,7 +70,7 @@ describe('day-by-day forecast', () => {
   it('prefers a known card statement over the estimate for that month', () => {
     const input = base();
     input.cardCharges = [{ cardAccountId: 'card:1', company: 'isracard', displayName: 'ישראכרט', chargeDate: '2026-10-15',
-      knownAmount: 2500, typicalAmount: 4000, knownVariable: 2500, typicalVariable: 4000, expectedAmount: 2500, transactions: 12, billingBankAccountId: 'bank:1', typicalChargeDay: 15 }];
+      knownAmount: 2500, projectedInstallments: 0, projectedFixed: 0, fixedItems: [], projectedPlanned: 0, plannedItems: [], typicalAmount: 4000, knownVariable: 2500, typicalVariable: 4000, expectedAmount: 2500, transactions: 12, billingBankAccountId: 'bank:1', typicalChargeDay: 15 }];
     const f = projectForecast(input);
     const cardEvents = f.events.filter(e => e.kind === 'card_charge');
     expect(cardEvents).toHaveLength(1);

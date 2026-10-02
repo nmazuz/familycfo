@@ -22,7 +22,12 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "demo": "tsx src/demo.ts",
-    "dev:demo": "BANK_DB=demo.db npm run dev"
+    "dev:demo": "BANK_DB=demo.db npm run dev",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/*.integration.test.ts",
+    "test:e2e": "playwright test",
+    "typecheck:tests": "tsc -p tsconfig.tests.json --noEmit",
+    "check": "npm test && npm run test:coverage && npm run typecheck && npm run typecheck:tests && npm --prefix web run typecheck"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
@@ -33,13 +38,15 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",
+    "@vitest/coverage-v8": "^4.1.11",
+    "concurrently": "^9.2.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^4.0.2",
-    "concurrently": "^9.2.1"
+    "vitest": "^4.0.2"
   },
   "overrides": {
     "israeli-bank-scrapers": {

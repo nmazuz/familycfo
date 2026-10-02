@@ -16,3 +16,8 @@ data/
 # local tool settings
 .claude/settings.local.json
 .DS_Store
+
+# generated test reports
+coverage/
+playwright-report/
+test-results/

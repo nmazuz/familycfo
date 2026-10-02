@@ -38,3 +38,5 @@ Add or update tests in `tests/` for logic changes (they use an in-memory SQLite,
 - The UI is Hebrew and RTL. Reuse the components in `web/src/components/ui.tsx` and the tokens in `web/src/index.css`.
 - Keep the app local-only: the API binds to 127.0.0.1, and nothing personal may be sent anywhere new without it
   being opt-in and documented in the README's privacy section.
+
+Test layers, coverage gates, browser setup and known regression cases are documented in [docs/testing.md](docs/testing.md).
