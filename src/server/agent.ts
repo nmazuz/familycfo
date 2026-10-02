@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
+import { getAgentWorkdir } from '../permissions.js';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../db/connection.js';
@@ -16,7 +16,6 @@ import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 const ROOT = resolve('.');
 const AGENT_DIR = join(ROOT, 'agent');
 // outside the repo, so the project's files, settings and CLAUDE.md aren't part of the agent's context
-const WORKDIR = join(tmpdir(), 'household-agent');
 
 function schemaText(db: DB): string {
   const tables = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('sqlite_sequence', 'schema_version')
@@ -42,7 +41,7 @@ ${schemaText(db)}`;
  * Prepare the work dir (outside the repo, so the developer CLAUDE.md isn't loaded): agent/'s instructions
  * and skills, a copy of the policy files, and a settings file whose hook lets Read open only that copy.
  */
-function syncAgentFiles(): void {
+function syncAgentFiles(WORKDIR: string): void {
   rmSync(join(WORKDIR, '.claude'), { recursive: true, force: true });
   cpSync(AGENT_DIR, WORKDIR, { recursive: true, force: true });
 
@@ -79,8 +78,8 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
     if (!message?.trim()) return reply.code(400).send({ error: 'message is required' });
     if (sessionId && !/^[\w-]{8,64}$/.test(sessionId)) return reply.code(400).send({ error: 'bad sessionId' });
 
-    mkdirSync(WORKDIR, { recursive: true });
-    syncAgentFiles();
+    const WORKDIR = getAgentWorkdir(); // unique, owner-only, checked before every copy
+    syncAgentFiles(WORKDIR);
     const mcpConfig = {
       mcpServers: {
         household: {

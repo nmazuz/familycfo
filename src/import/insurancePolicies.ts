@@ -7,7 +7,8 @@
  * updated; not found → created. Documents are copied into data/policies/<policy id>/ (once per file name).
  * Asset snapshots (e.g. a savings balance seen on a portal) are added too. Re-running changes nothing new.
  */
-import { copyFileSync, mkdirSync, readFileSync, statSync } from 'fs';
+import { chmodPrivate, mkdirPrivate } from '../permissions.js';
+import { copyFileSync, readFileSync, statSync } from 'fs';
 import { basename, dirname, extname, join, resolve } from 'path';
 import { getDb, type DB } from '../db/connection.js';
 import { pickColumns, snake } from '../server/crud.js';
@@ -101,8 +102,9 @@ export function importInsurance(db: DB, spec: InsuranceImport, baseDir: string) 
 
   // files only after the rows are committed
   for (const c of copies) {
-    mkdirSync(dirname(c.to), { recursive: true });
+    mkdirPrivate(dirname(c.to));
     copyFileSync(c.from, c.to);
+    chmodPrivate(c.to);
   }
   return { created, updated, documents, snapshots };
 }

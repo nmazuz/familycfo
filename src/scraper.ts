@@ -32,6 +32,36 @@ function findChromePath(): string | undefined {
   return undefined;
 }
 
+/** Sandbox-off switch for Docker / CI, where Chrome cannot create its sandbox. Never set it on a normal computer. */
+export const NO_SANDBOX_ENV = 'CHROME_NO_SANDBOX';
+
+/**
+ * Chrome flags for the scraper. This browser logs in to banks with the real credentials, so its sandbox stays on
+ * unless `CHROME_NO_SANDBOX=1` is set explicitly. (Chrome starts each run with a fresh temporary profile.)
+ */
+export function chromeArgs(env: NodeJS.ProcessEnv = process.env, warn: (msg: string) => void = console.warn): string[] {
+  const args = [
+    '--disable-blink-features=AutomationControlled',
+    '--disable-infobars',
+    '--disable-dev-shm-usage',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-background-networking',
+    '--disable-sync',
+    '--disable-translate',
+    '--hide-scrollbars',
+    '--metrics-recording-only',
+    '--mute-audio',
+    '--safebrowsing-disable-auto-update',
+    '--window-size=1920,1080',
+  ];
+  if (env[NO_SANDBOX_ENV] === '1') {
+    warn(`WARNING: ${NO_SANDBOX_ENV}=1 — Chrome runs WITHOUT its sandbox. Use this only inside Docker or CI.`);
+    args.unshift('--no-sandbox', '--disable-setuid-sandbox');
+  }
+  return args;
+}
+
 interface AccountConfig {
   companyId: keyof typeof CompanyTypes;
   credentials: Record<string, string>;
@@ -168,23 +198,7 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
         defaultTimeout: 120000, // 2 minutes for navigation
         navigationRetryCount: 1,
         executablePath: findChromePath(),
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-infobars',
-          '--disable-dev-shm-usage',
-          '--no-first-run',
-          '--no-default-browser-check',
-          '--disable-background-networking',
-          '--disable-sync',
-          '--disable-translate',
-          '--hide-scrollbars',
-          '--metrics-recording-only',
-          '--mute-audio',
-          '--safebrowsing-disable-auto-update',
-          '--window-size=1920,1080',
-        ],
+        args: chromeArgs(),
         preparePage: async (page: Page) => {
           // The library closes the page before returning a failed result, so snapshot it on close
           const closePage = page.close.bind(page);
@@ -261,6 +275,9 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       summaries.push({ company: account.companyId, success: true, newTransactionIds: newIds });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: newIds.length });
     } catch (err) {
+      if (process.env.CHROME_NO_SANDBOX !== '1' && /sandbox|running as root/i.test(String(err))) {
+        console.error('Chrome could not use its sandbox. Run as a non-root user and check OS sandbox support (including AppArmor). Only in an isolated Docker / CI environment, CHROME_NO_SANDBOX=1 disables it.');
+      }
       console.error(`Error scraping ${account.companyId}:`, err);
       recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
         errorType: 'EXCEPTION', errorMessage: String(err) });

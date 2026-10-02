@@ -1,4 +1,5 @@
-import { createReadStream, mkdirSync, rmSync, statSync, writeFileSync } from 'fs';
+import { mkdirPrivate, PRIVATE_FILE_MODE } from '../../permissions.js';
+import { createReadStream, rmSync, statSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../../db/connection.js';
@@ -154,8 +155,8 @@ export function insuranceRoutes(app: FastifyInstance, db: DB): void {
     const res = db.prepare(`INSERT INTO insurance_documents (policy_id, file_name, original_name, mime, size, kind) VALUES (?, '', ?, ?, ?, ?)`)
       .run(policyId, original, mime, body.length, kind);
     const fileName = `${res.lastInsertRowid}-${safeName(original)}.${MIME_EXT[mime]}`;
-    mkdirSync(join(POLICIES_DIR, String(policyId)), { recursive: true });
-    writeFileSync(join(POLICIES_DIR, String(policyId), fileName), body);
+    mkdirPrivate(join(POLICIES_DIR, String(policyId)));
+    writeFileSync(join(POLICIES_DIR, String(policyId), fileName), body, { mode: PRIVATE_FILE_MODE });
     db.prepare(`UPDATE insurance_documents SET file_name = ? WHERE id = ?`).run(fileName, res.lastInsertRowid);
     return documentsOf(db, policyId).find(d => d.id === Number(res.lastInsertRowid));
   });

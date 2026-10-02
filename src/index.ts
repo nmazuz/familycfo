@@ -3,8 +3,10 @@ import { scrapeAll, type Config } from './scraper.js';
 import { runPipeline } from './pipeline.js';
 import { getDb } from './db/connection.js';
 import { loadConfig } from './config.js';
+import { warnBroadPermissions } from './permissions.js';
 
 const config = loadConfig();
+warnBroadPermissions();
 
 async function run(cfg: Config): Promise<void> {
   const db = getDb();

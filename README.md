@@ -69,6 +69,18 @@ It understands how Israeli money actually moves:
   the port sees everything, so never expose it to a network or the internet.
 - Your bank logins live in `accounts.json` (git-ignored). The database `bank.db`, its backups and imported documents
   (`data/`) are git-ignored too. **Never commit them.** Prefer full-disk encryption on the computer that runs this.
+- **Other websites can't use the API.** It rejects requests whose `Host` is not `127.0.0.1` / `localhost` (DNS
+  rebinding) and writes whose `Origin` is not a local page (cross-site POSTs). `curl` and scripts on your machine
+  still work. Other programs running as you can still reach the port: the model is one trusted computer.
+- **Owner-only files.** `bank.db` (and its `-wal` / `-shm`), imported documents and the data chat's working copy are
+  created readable by you only (`0600` files, `0700` folders). On start the app warns if `accounts.json`, `bank.db`,
+  `backups/` or `data/` are readable by other users (fix with `chmod 600` / `chmod 700`); it never changes your files.
+  `accounts.json` still holds the logins in plain text — keep the disk encrypted.
+- **The scraper's Chrome keeps its sandbox on.** It starts with a fresh temporary profile each run. Only inside Docker
+  or CI, where Chrome cannot create its sandbox, set `CHROME_NO_SANDBOX=1` (the scraper logs a warning).
+  On a regular host, run Chrome as a non-root user and check OS sandbox support first (Ubuntu 24.04 AppArmor
+  can restrict user namespaces). A sandbox-related launch error logs this hint; do not disable it for bank logins
+  on a normal computer.
 - Outgoing network calls, and what they send:
   - your banks / card companies (the scraper logs in as you, in a local Chrome);
   - Bank of Israel exchange rates (nothing personal);
@@ -200,6 +212,7 @@ Both are idempotent — re-running updates, never duplicates. Policy documents c
 | `SCRAPE_ONLY` | env | all | `SCRAPE_ONLY=isracard,max` scrapes only these companies. |
 | `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling. |
 | `SHOW_BROWSER` | env | shown | `SHOW_BROWSER=0` runs Chrome headless. |
+| `CHROME_NO_SANDBOX` | env | off | `CHROME_NO_SANDBOX=1` starts the scraper's Chrome without its sandbox. Only for Docker / CI. |
 | `SCHEDULE` | env | none | Cron expression; keeps `npm run scrape` running on a schedule. |
 | `POLICIES_DIR` / `REPORTS_DIR` | env | `data/policies` / `data/reports` | Where insurance documents and imported reports are kept. |
 | `CATEGORY_API_URL` | env | none | `categoryApiUrl` for `npm run pipeline`. |
@@ -210,6 +223,7 @@ Both are idempotent — re-running updates, never duplicates. Policy documents c
 ```
 src/
   scraper.ts            israeli-bank-scrapers runner (OTP, progress hooks)
+  permissions.ts        owner-only files / folders and the start-up warning for wide ones
   index.ts              `npm run scrape` entry (once or on a cron schedule)
   pipeline.ts           what runs after every scrape: FX → categorize → kinds → card bills → transfers → recurring → alerts
   db/                   SQLite connection, numbered migrations, saving scraped accounts
