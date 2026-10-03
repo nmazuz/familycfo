@@ -10,7 +10,7 @@ const COMPANY_LABELS: Record<string, string> = {
   mercantile: 'מרכנתיל', otsarHahayal: 'אוצר החייל', yahav: 'יהב', massad: 'מסד', union: 'איגוד', oneZero: 'One Zero',
   isracard: 'ישראכרט', amex: 'אמריקן אקספרס', max: 'מקס', visaCal: 'כאל', behatsdaa: 'בהצדעה', beyahadBishvilha: 'ביחד בשבילך',
 };
-const companyName = (id: string) => COMPANY_LABELS[id] ?? id;
+export const companyName = (id: string) => COMPANY_LABELS[id] ?? id;
 
 const rtf = new Intl.RelativeTimeFormat('he', { numeric: 'auto' });
 function ago(utc: string): string {
@@ -21,6 +21,9 @@ function ago(utc: string): string {
   return rtf.format(Math.round(minutes / 60 / 24), 'day');
 }
 
+const SHOW_KEY = 'scrape.showBrowser';
+const readShow = () => { try { return localStorage.getItem(SHOW_KEY) !== '0'; } catch { return true; } };
+
 const active = (s: ScrapeJob['status'] | undefined) => s === 'running' || s === 'pipeline';
 
 /** Header button that scrapes all banks from the UI, shows progress and asks for the bank's OTP code. */
@@ -28,6 +31,8 @@ export function ScrapeButton() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
+  const [showBrowser, setShowBrowser] = useState(readShow);
+  const toggleShow = (v: boolean) => { setShowBrowser(v); try { localStorage.setItem(SHOW_KEY, v ? '1' : '0'); } catch { /* ignore */ } };
   const job = useQuery({
     queryKey: ['scrape'],
     queryFn: () => api.get<ScrapeJob>('/scrape'),
@@ -37,7 +42,7 @@ export function ScrapeButton() {
   const running = active(data?.status);
 
   const start = useMutation({
-    mutationFn: () => api.post<ScrapeJob>('/scrape', {}),
+    mutationFn: () => api.post<ScrapeJob>('/scrape', { showBrowser }),
     onSuccess: () => { setOpen(true); qc.invalidateQueries({ queryKey: ['scrape'] }); },
   });
   const sendOtp = useMutation({
@@ -111,11 +116,15 @@ export function ScrapeButton() {
               </li>
             ))}
           </ul>
+          <label className="flex items-center gap-2 border-t px-4 py-2.5 text-sm">
+            <input type="checkbox" checked={showBrowser} disabled={running} onChange={e => toggleShow(e.target.checked)} />
+            הצג חלון דפדפן בזמן העדכון
+          </label>
           <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
             {data?.status === 'pipeline' ? 'מסווג תנועות ומעדכן חישובים…'
               : data?.status === 'done' ? `הסתיים · נוספו ${data.newTransactions} תנועות חדשות`
               : data?.status === 'failed' ? (data.error ?? 'שגיאה')
-              : running ? 'חלון דפדפן ייפתח לכל בנק — אפשר להמשיך לעבוד בינתיים' : null}
+              : running ? (showBrowser ? 'חלון דפדפן ייפתח לכל בנק — אפשר להמשיך לעבוד בינתיים' : 'רץ ברקע ללא חלון דפדפן') : null}
           </div>
         </PopoverContent>
       </Popover>

@@ -1,0 +1,131 @@
+# Builds the desktop app on macOS, Windows and Linux, each on its own OS (native modules such as better-sqlite3 have to
+# be built for the target), and, for a version tag, uploads the installers to a draft GitHub Release. The app's
+# auto-update reads from that release once it is published.
+#
+#   Release:  set "version" in package.json, commit, then push a matching tag:  git tag v1.0.1 && git push origin v1.0.1
+#   Try it:   Actions → desktop → Run workflow. It builds and keeps the files as run artifacts, without publishing.
+#
+# Optional repository secrets (Settings → Secrets and variables → Actions). Without them the builds are unsigned:
+#   macOS signing:       MAC_CERTIFICATE_P12_BASE64 (Developer ID Application certificate, .p12 in base64), MAC_CERTIFICATE_PASSWORD
+#   macOS notarization:  APPLE_API_KEY_P8_BASE64 (App Store Connect API key, .p8 in base64), APPLE_API_KEY_ID, APPLE_API_ISSUER
+#   Windows signing:     WIN_CERTIFICATE_PFX_BASE64, WIN_CERTIFICATE_PASSWORD
+name: desktop
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the draft release and upload to it (the built-in GITHUB_TOKEN, no stored token)
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: --mac --arm64 --x64
+          - os: windows-latest
+            target: --win --x64
+          - os: ubuntu-latest
+            target: --linux --x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      # the scraper uses the user's own Chrome / Edge (or downloads one on demand): don't bundle puppeteer's
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: The tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME but package.json has version $version"
+            exit 1
+          fi
+
+      - name: Install
+        run: npm ci # its postinstall installs web/ too
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck && npm --prefix web run typecheck
+
+      - name: Build the UI and the bundles
+        run: npm --prefix web run build && npm run desktop:bundle
+
+      - name: Signing and notarization (only when the secrets exist)
+        env:
+          MAC_CERTIFICATE_P12_BASE64: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          WIN_CERTIFICATE_PFX_BASE64: ${{ secrets.WIN_CERTIFICATE_PFX_BASE64 }}
+          WIN_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+        run: |
+          # electron-builder reads CSC_LINK / CSC_KEY_PASSWORD (a certificate file) and APPLE_API_* (notarytool).
+          # Secrets go to files in the runner's temp dir, which is wiped after the job; nothing is echoed.
+          extra=""
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$MAC_CERTIFICATE_P12_BASE64" ]; then
+            echo "$MAC_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/mac.p12"
+            echo "CSC_LINK=$RUNNER_TEMP/mac.p12" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$MAC_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+            if [ -n "$APPLE_API_KEY_P8_BASE64" ]; then
+              echo "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/apple-api-key.p8"
+              echo "APPLE_API_KEY=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
+              echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
+              echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
+              extra="-c.mac.notarize=true"
+            fi
+          elif [ "$RUNNER_OS" = "Windows" ] && [ -n "$WIN_CERTIFICATE_PFX_BASE64" ]; then
+            echo "$WIN_CERTIFICATE_PFX_BASE64" | base64 --decode > "$RUNNER_TEMP/win.pfx"
+            echo "CSC_LINK=$RUNNER_TEMP/win.pfx" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$WIN_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+          else
+            # no certificate: build unsigned instead of failing (the installers warn: Gatekeeper / SmartScreen)
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
+          echo "BUILDER_EXTRA=$extra" >> "$GITHUB_ENV"
+
+      - name: Package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # a tag uploads to the draft release; a manual run only builds
+          publish=never
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then publish=always; fi
+          npx electron-builder ${{ matrix.target }} --publish "$publish" $BUILDER_EXTRA
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: familycfo-${{ runner.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/latest*.yml

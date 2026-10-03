@@ -10,7 +10,9 @@ import { buildRecommendations } from '../../analytics/recommendations.js';
 import { netWorth } from '../../analytics/networth.js';
 import { refreshPrices } from './investments.js';
 import { runPipeline } from '../../pipeline.js';
+import { SCRAPERS } from 'israeli-bank-scrapers';
 import { scrapeState, startScrape, submitOtp } from '../scrapeJob.js';
+import { downloadState, findBrowser, startBrowserDownload } from '../../browser.js';
 import { toApi } from '../crud.js';
 import { monthPlan } from '../../analytics/commitments.js';
 import { parseFilter } from './transactions.js';
@@ -170,7 +172,24 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     ...scrapeState(),
     lastSuccessAt: db.prepare(`SELECT MAX(finished_at) FROM scrape_runs WHERE success = 1`).pluck().get() as string | null,
   }));
-  app.post('/api/scrape', async () => startScrape(db));
+  app.post('/api/scrape', async req => {
+    const showBrowser = (req.body as { showBrowser?: unknown } | null)?.showBrowser;
+    return startScrape(db, { showBrowser: typeof showBrowser === 'boolean' ? showBrowser : undefined });
+  });
+  // the browser the scraper drives: an installed one, or Chrome for Testing downloaded into the data folder
+  app.get('/api/browser', async () => ({ found: await findBrowser(), download: downloadState() }));
+  app.post('/api/browser/download', async () => startBrowserDownload());
+
+  // the banks / card companies the scraper supports and the names of their login fields (no values) — for the
+  // desktop app's bank-accounts form
+  app.get('/api/scrape/companies', async () => Object.entries(SCRAPERS)
+    .map(([id, s]) => ({ id, name: s.name, loginFields: s.loginFields.map(String) })));
+  // the desktop app checks a login right after it is saved: log in, read a few days, save nothing
+  app.post('/api/scrape/check', async (req, reply) => {
+    const loginId = String((req.body as { loginId?: unknown })?.loginId ?? '');
+    if (!/^[\w-]{8,64}$/.test(loginId)) return reply.code(400).send({ error: 'loginId is required' });
+    return startScrape(db, { loginIds: [loginId], checkOnly: true });
+  });
   app.post('/api/scrape/otp', async req => {
     submitOtp(String((req.body as { code?: unknown })?.code ?? '').trim());
     return { ok: true };

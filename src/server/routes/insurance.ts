@@ -4,14 +4,15 @@ import type { FastifyInstance } from 'fastify';
 import type { DB } from '../../db/connection.js';
 import { addDays, today } from '../../analytics/common.js';
 import { pickColumns, snake, toApi } from '../crud.js';
+import { dataPath } from '../../paths.js';
 
 /**
  * Insurance policies and their documents. Files live in data/policies/<policy id>/ (git-ignored);
  * the data chat reads them from there (src/server/agent.ts).
  */
-export const POLICIES_DIR = resolve(process.env.POLICIES_DIR ?? join('data', 'policies'));
+export const POLICIES_DIR = resolve(process.env.POLICIES_DIR ?? dataPath('data', 'policies'));
 /** Imported reports (pension / insurance summaries) and their extracted JSON. */
-export const REPORTS_DIR = resolve(process.env.REPORTS_DIR ?? join('data', 'reports'));
+export const REPORTS_DIR = resolve(process.env.REPORTS_DIR ?? dataPath('data', 'reports'));
 
 const COLUMNS = ['name', 'type', 'insurer', 'policyNumber', 'insuredMemberId', 'insuredDetails', 'premium', 'premiumFrequency',
   'paymentAccountId', 'matchPattern', 'startDate', 'endDate', 'coverage', 'deductible', 'agentName', 'agentPhone', 'agentEmail',

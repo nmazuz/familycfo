@@ -180,3 +180,15 @@ export function refreshAlerts(db: DB, asOf = today()): number {
   })();
   return added;
 }
+
+export interface AlertNotice { id: number; type: string; severity: AlertDraft['severity']; title: string; message: string }
+
+/** Alerts not yet shown as a desktop notification (and not dismissed), marked as shown. */
+export function takeAlertsToNotify(db: DB): AlertNotice[] {
+  return db.transaction(() => {
+    const rows = db.prepare(`SELECT id, type, severity, title, message FROM alerts
+      WHERE notified_at IS NULL AND dismissed_at IS NULL ORDER BY id`).all() as AlertNotice[];
+    db.prepare(`UPDATE alerts SET notified_at = CURRENT_TIMESTAMP WHERE notified_at IS NULL`).run();
+    return rows;
+  })();
+}

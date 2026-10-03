@@ -1,0 +1,51 @@
+# FamilyCFO for macOS, Windows and Linux. npm run desktop:pack builds an unpacked app in release/. npm run desktop:dist
+# builds the installers for the OS it runs on (cross-building needs that OS for native modules: use CI per OS).
+appId: io.familycfo.app
+productName: FamilyCFO
+directories:
+  output: release
+  buildResources: desktop/assets
+files:
+  - build/desktop/**
+  - "!build/desktop/*.map"
+  - package.json
+extraResources:
+  - { from: web/dist, to: web }
+  - { from: agent, to: agent }
+  - { from: src/agent/guard-read.mjs, to: src/agent/guard-read.mjs }
+  - { from: desktop/assets, to: assets, filter: ["trayTemplate*.png", "icon.png"] }
+# native modules can't load from inside the asar archive
+asarUnpack:
+  - "**/*.node"
+# better-sqlite3 rebuilt for Electron's Node (package.json's desktop scripts rebuild it for the system Node afterwards)
+npmRebuild: true
+mac:
+  category: public.app-category.finance
+  icon: desktop/assets/icon.png
+  target: [dmg, zip]
+  hardenedRuntime: true
+  entitlements: desktop/entitlements.mac.plist
+  entitlementsInherit: desktop/entitlements.mac.plist
+  # desktop:dist turns this on; it reads the notarytool keychain profile named in APPLE_KEYCHAIN_PROFILE
+  notarize: false
+dmg:
+  title: FamilyCFO
+win:
+  icon: desktop/assets/icon.png
+  target: [nsis]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+linux:
+  icon: desktop/assets/icon.png
+  category: Office;Finance
+  target: [AppImage, deb]
+  maintainer: FamilyCFO
+  synopsis: Local-first household finances for Israeli families
+publish:
+  provider: github
+  owner: nmazuz
+  repo: familycfo
+  # .github/workflows/desktop.yml uploads to a draft: publish it on GitHub to release it (and start auto-updates)
+  releaseType: draft

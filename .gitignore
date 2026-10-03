@@ -16,3 +16,7 @@ data/
 # local tool settings
 .claude/settings.local.json
 .DS_Store
+
+# the desktop app's bundles and packaged builds
+build/
+release/
