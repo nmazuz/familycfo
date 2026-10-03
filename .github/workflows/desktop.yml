@@ -14,6 +14,8 @@ name: desktop
 on:
   push:
     tags: ['v*']
+    # temporary: build on every push to this branch (a manual run only shows up once the file is on main)
+    branches: ['feature/electron-desktop']
   workflow_dispatch:
 
 permissions:
