@@ -65,7 +65,12 @@ jobs:
           fi
 
       - name: Install
-        run: npm ci # its postinstall installs web/ too
+        # The root postinstall (npm --prefix web install) loops on Windows runners ('npm' is not recognized inside
+        # cmd.exe), so skip it and install web/ explicitly; better-sqlite3's own install script is re-run after.
+        run: |
+          npm ci --ignore-scripts
+          npm --prefix web ci
+          npm rebuild better-sqlite3
 
       - name: Test
         run: npm test
