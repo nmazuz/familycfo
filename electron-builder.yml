@@ -2,6 +2,8 @@
 # builds the installers for the OS it runs on (cross-building needs that OS for native modules: use CI per OS).
 appId: io.familycfo.app
 productName: FamilyCFO
+# The architecture in every installer name (the x64 DMG has none by default), e.g. FamilyCFO-1.0.0-arm64.dmg
+artifactName: ${productName}-${version}-${arch}.${ext}
 directories:
   output: release
   buildResources: desktop/assets
