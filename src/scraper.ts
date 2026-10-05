@@ -35,6 +35,8 @@ function findChromePath(): string | undefined {
 interface AccountConfig {
   companyId: keyof typeof CompanyTypes;
   credentials: Record<string, string>;
+  /** household member the scraped accounts belong to (set in the setup page); applied to accounts that have no owner yet */
+  ownerMemberId?: number | null;
 }
 
 export interface Config {
@@ -253,6 +255,9 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       const newIds: number[] = [];
       for (const acc of result.accounts ?? []) {
         const saved = saveScrapedAccount(db, account.companyId, acc);
+        if (account.ownerMemberId) {
+          db.prepare(`UPDATE accounts SET owner_member_id = ? WHERE id = ? AND owner_member_id IS NULL`).run(account.ownerMemberId, saved.accountId);
+        }
         newIds.push(...saved.insertedIds);
         const label = acc.savingsAccount ? ' (savings deposit)' : '';
         console.log(`  ${saved.accountId}${label}: balance ${acc.balance ?? '-'} ${acc.currency ?? 'ILS'}, ${saved.insertedIds.length} new, ${saved.updated} updated`);

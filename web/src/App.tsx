@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
   ArrowLeftRight, ChartColumn, Bell, Briefcase, CalendarCheck, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
-  ChartCandlestick, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
+  ChartCandlestick, FileUp, Settings2, Wand2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert } from './api';
 import { useFilters, useMeta } from './state';
@@ -24,6 +24,8 @@ import Trends from './pages/Trends';
 import Insurance from './pages/Insurance';
 import Pension from './pages/Pension';
 import Investments from './pages/Investments';
+import Setup from './pages/Setup';
+import ImportPage from './pages/Import';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/kit/tooltip';
@@ -46,7 +48,9 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/loans', label: 'הלוואות ומשכנתא', icon: Home },
   { to: '/insurance', label: 'ביטוחים', icon: ShieldCheck },
   { to: '/categories', label: 'קטגוריות', icon: Layers },
+  { to: '/import', label: 'העלאת קובץ', icon: FileUp },
   { to: '/settings', label: 'הגדרות', icon: Settings2 },
+  { to: '/setup', label: 'הגדרה ראשונית', icon: Wand2 },
 ];
 
 function useMediaQuery(query: string): boolean {
@@ -248,7 +252,9 @@ export default function App() {
           {/* CSS entry (backwards fill) leaves no transform behind, so fixed children stay viewport-relative */}
           <div key={pathname} className="animate-page-in">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/" element={<FirstRunGate />} />
+              <Route path="/setup" element={<Setup />} />
+              <Route path="/import" element={<ImportPage />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/fixed" element={<Fixed />} />
               <Route path="/budgets" element={<Budgets />} />
@@ -270,4 +276,11 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+/** First run (no bank login filled in yet) opens the setup page instead of an empty overview. */
+function FirstRunGate() {
+  const logins = useQuery({ queryKey: ['setup-logins'], queryFn: () => api.get<{ ready: boolean }>('/setup/logins') });
+  if (logins.isPending) return null;
+  return logins.data && !logins.data.ready ? <Navigate to="/setup" replace /> : <Dashboard />;
 }

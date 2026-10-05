@@ -5,7 +5,7 @@ import { api, type ScrapeJob } from '../api';
 import { Popover, PopoverContent, PopoverTrigger } from './kit/popover';
 import { cn } from '@/lib/utils';
 
-const COMPANY_LABELS: Record<string, string> = {
+export const COMPANY_LABELS: Record<string, string> = {
   hapoalim: 'בנק הפועלים', leumi: 'בנק לאומי', discount: 'דיסקונט', mizrahi: 'מזרחי טפחות', beinleumi: 'הבינלאומי',
   mercantile: 'מרכנתיל', otsarHahayal: 'אוצר החייל', yahav: 'יהב', massad: 'מסד', union: 'איגוד', oneZero: 'One Zero',
   isracard: 'ישראכרט', amex: 'אמריקן אקספרס', max: 'מקס', visaCal: 'כאל', behatsdaa: 'בהצדעה', beyahadBishvilha: 'ביחד בשבילך',

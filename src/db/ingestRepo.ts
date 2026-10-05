@@ -12,7 +12,8 @@ export interface SaveResult {
  * its transactions. User-owned fields (category, member, business, tags, notes...) are
  * never overwritten here — only data that comes from the bank.
  */
-export function saveScrapedAccount(db: DB, companyId: string, account: ScrapedAccount): SaveResult & { accountId: string } {
+export function saveScrapedAccount(db: DB, companyId: string, account: ScrapedAccount,
+  opts: { recordBalance?: boolean } = {}): SaveResult & { accountId: string } {
   const accountId = `${companyId}:${account.accountNumber}`;
 
   db.prepare(`
@@ -34,9 +35,12 @@ export function saveScrapedAccount(db: DB, companyId: string, account: ScrapedAc
     isSavings: account.savingsAccount ? 1 : 0,
   });
 
-  const balance = account.balance
-    ?? (account as { info?: { futureChargesTotal?: number } }).info?.futureChargesTotal ?? 0;
-  db.prepare(`INSERT INTO balances (account_id, balance) VALUES (?, ?)`).run(accountId, balance);
+  // an uploaded file may come without a balance — don't record a made-up 0 then
+  if (opts.recordBalance !== false) {
+    const balance = account.balance
+      ?? (account as { info?: { futureChargesTotal?: number } }).info?.futureChargesTotal ?? 0;
+    db.prepare(`INSERT INTO balances (account_id, balance) VALUES (?, ?)`).run(accountId, balance);
+  }
 
   const result = saveTransactions(db, normalizeTransactions(accountId, account.txns ?? []));
   return { accountId, ...result };

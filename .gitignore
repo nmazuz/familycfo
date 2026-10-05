@@ -16,3 +16,6 @@ data/
 # local tool settings
 .claude/settings.local.json
 .DS_Store
+
+# temp file written while saving logins from the setup page
+accounts.json.tmp
