@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Circle, KeyRound, LoaderCircle, RefreshCw, X } from 'lucide-react';
 import { api, type ScrapeJob } from '../api';
@@ -68,7 +69,6 @@ export function ScrapeButton() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button type="button" className={cn('btn', data?.otp ? 'border-amber-400 text-amber-700 dark:text-amber-300 animate-pulse' : !running && 'btn-primary')}
-            onClick={e => { if (!running && !data?.otp) { e.preventDefault(); start.mutate(); } }}
             disabled={start.isPending}>
             {data?.otp ? <KeyRound /> : <RefreshCw className={cn(running && 'animate-spin')} />}
             {label}
@@ -76,7 +76,7 @@ export function ScrapeButton() {
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={8} className="w-80 max-w-[calc(100vw-1.5rem)] p-0" dir="rtl">
           <div className="border-b px-4 py-3 text-sm font-semibold">
-            {running ? 'מעדכן נתונים מהבנקים' : data?.status === 'failed' ? 'העדכון לא הצליח' : 'העדכון הסתיים'}
+            {running ? 'מעדכן נתונים מהבנקים' : data?.status === 'failed' ? 'העדכון לא הצליח' : data?.status === 'done' ? 'העדכון הסתיים' : 'סריקת חשבונות וכרטיסים'}
           </div>
           {data?.otp && (
             <form className="space-y-2 border-b bg-amber-50/60 px-4 py-3 dark:bg-amber-500/10"
@@ -116,6 +116,17 @@ export function ScrapeButton() {
               </li>
             ))}
           </ul>
+          {!running && <div className="border-t px-4 py-3">
+            <button type="button" className="btn btn-primary w-full" disabled={start.isPending} onClick={() => start.mutate()}>
+              <RefreshCw />{start.isPending ? 'מתחיל…' : 'התחל סריקה'}
+            </button>
+          </div>}
+          {!running && data?.latestBatch && <div className="border-t px-4 py-3 text-sm">
+            <Link className="text-primary underline" onClick={() => setOpen(false)}
+              to={`/transactions?cycle=&scrapeBatch=${data.latestBatch.id}&showZero=1&hideCardPayments=0`}>
+              הצג {data.latestBatch.newTransactions} תנועות שנוספו בסריקה האחרונה
+            </Link>
+          </div>}
           <label className="flex items-center gap-2 border-t px-4 py-2.5 text-sm">
             <input type="checkbox" checked={showBrowser} disabled={running} onChange={e => toggleShow(e.target.checked)} />
             הצג חלון דפדפן בזמן העדכון

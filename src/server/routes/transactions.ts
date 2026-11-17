@@ -12,10 +12,10 @@ interface TxQuery {
   category?: string; account?: string; search?: string; kind?: string; review?: string; hideCardPayments?: string;
   /** YYYY-MM-DD: only card rows charged in that statement (same card, same charge month) */
   charge?: string;
-  limit?: string; offset?: string;
+  limit?: string; offset?: string; followUp?: string; showZero?: string; scrapeBatch?: string;
 }
 
-const EDITABLE = ['category_id', 'member_id', 'business_id', 'business_share_pct', 'kind', 'fixed_override', 'excluded', 'notes'];
+const EDITABLE = ['category_id', 'member_id', 'business_id', 'business_share_pct', 'kind', 'fixed_override', 'excluded', 'notes', 'follow_up'];
 
 export function parseFilter(q: TxQuery) {
   return {
@@ -42,6 +42,12 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
     // a card is charged once a month, so a statement = its rows whose charge date falls in that month
     if (q.charge) txs = txs.filter(t => t.processedDate.slice(0, 7) === q.charge!.slice(0, 7));
     if (q.kind) txs = txs.filter(t => q.kind!.split(',').includes(t.kind));
+    if (q.showZero !== '1') txs = txs.filter(t => t.amount !== 0);
+    if (q.followUp === '1') txs = txs.filter(t => t.followUp);
+    if (q.scrapeBatch) {
+      const batch = q.scrapeBatch === 'latest' ? db.prepare('SELECT MAX(id) FROM scrape_batches').pluck().get() : Number(q.scrapeBatch);
+      txs = txs.filter(t => t.scrapeBatchId === batch);
+    }
     if (q.review === '1') txs = txs.filter(needsReview);
     txs.sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.id - a.id);
     const offset = Number(q.offset ?? 0), limit = Math.min(Number(q.limit ?? 200), 2000);
@@ -81,6 +87,10 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
 
   const update = (id: number, body: Record<string, unknown>) => {
     const values = pickColumns(body, EDITABLE);
+    if ('follow_up' in values) {
+      if (values.follow_up !== 0 && values.follow_up !== 1 && typeof values.follow_up !== 'boolean') throw Object.assign(new Error('followUp must be boolean or 0/1'), { statusCode: 400 });
+      values.follow_up = values.follow_up ? 1 : 0;
+    }
     const sets = Object.keys(values).map(k => `${k} = @${k}`);
     if ('category_id' in values) sets.push(`category_source = 'manual'`);
     if ('kind' in values) sets.push(values.kind == null ? `kind_source = 'auto'` : `kind_source = 'manual'`);

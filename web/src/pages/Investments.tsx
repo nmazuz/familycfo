@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 const priceIn = (n: number | null | undefined, currency: string) => {
   if (n == null) return '—';
-  try { return new Intl.NumberFormat('he-IL', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n); } catch { return `${n.toFixed(2)} ${currency}`; }
+  try { return new Intl.NumberFormat('he-IL', { style: 'currency', currency, maximumFractionDigits: 4 }).format(n); } catch { return `${n.toFixed(2)} ${currency}`; }
 };
 const signedPct = (n: number | null | undefined) => (n == null ? '—' : `${n > 0 ? '+' : ''}${n.toFixed(2)}%`);
 const time = (iso: string | null) => (iso ? new Intl.DateTimeFormat('he-IL', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—');
@@ -83,7 +83,7 @@ export default function Investments() {
           <SectionTitle icon={ChartCandlestick} color="var(--chart-2)">החזקות</SectionTitle>
           <div className="scroll-x"><table className="table">
             <thead><tr>
-              <th>נייר</th><th className="text-end">כמות</th><th className="text-end">מחיר · היום</th>
+              <th>נייר</th><th className="text-end">כמות</th><th className="text-end">שער נוכחי</th>
               <th className="text-end">שווי</th><th className="text-end">רווח / הפסד</th><th className="text-end">עלות</th><th className="text-end">נתח</th><th>איפה</th><th />
             </tr></thead>
             <tbody>
@@ -98,7 +98,8 @@ export default function Investments() {
                   </td>
                   <td className="num text-end">{h.quantity.toLocaleString('he-IL')}</td>
                   <td className="num whitespace-nowrap text-end">
-                    {priceIn(h.price, h.currency)}
+                    <div>{priceIn(h.price, h.currency)}</div>
+                    {h.priceSource === 'quote' && h.priceAsOf && <div className="text-[11px] text-muted-foreground">נכון ל־{day(h.priceAsOf)} {time(h.priceAsOf)}</div>}
                     {h.priceSource === 'manual'
                       ? h.manualPriceDate && <div className="text-xs text-zinc-500">{day(h.manualPriceDate)}</div>
                       : <div className={cn('text-xs', toneOf(h.dayChangePct) || 'text-zinc-500')}>{h.dayChangePct == null ? 'לא נסחר היום' : signedPct(h.dayChangePct)}</div>}

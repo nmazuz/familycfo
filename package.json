@@ -1,12 +1,12 @@
 {
   "name": "familycfo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "FamilyCFO — a local-first CFO for Israeli families: scrapes your banks and credit cards, then shows cash flow, budgets, forecast, net worth, insurance, pension and a stock portfolio, with an optional AI chat over your own data.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.22.2"
   },
   "scripts": {
     "postinstall": "npm --prefix web install",
@@ -26,16 +26,17 @@
     "desktop:bundle": "node desktop/build.mjs",
     "desktop:dev": "npm --prefix web run build && npm run desktop:bundle && electron .",
     "desktop:pack": "npm --prefix web run build && npm run desktop:bundle && (electron-builder --dir --publish never; s=$?; npm rebuild better-sqlite3; exit $s)",
-    "desktop:dist": "npm --prefix web run build && npm run desktop:bundle && (electron-builder --publish never -c.mac.notarize=true; s=$?; npm rebuild better-sqlite3; exit $s)"
+    "desktop:dist": "npm --prefix web run build && npm run desktop:bundle && (electron-builder --publish never -c.mac.notarize=true; s=$?; npm rebuild better-sqlite3; exit $s)",
+    "mobile": "npm --prefix web run build && HOUSEHOLD_WEB_DIST=web/dist npm run server"
   },
   "dependencies": {
     "@puppeteer/browsers": "^2.13.2",
     "better-sqlite3": "^13.0.3",
     "electron-updater": "^6.8.9",
     "fastify": "^5.12.5",
-    "israeli-bank-scrapers": "^6.12.2",
+    "israeli-bank-scrapers": "^6.13.0",
     "node-cron": "^3.0.3",
-    "puppeteer": "^24.37.1",
+    "puppeteer": "^24.43.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

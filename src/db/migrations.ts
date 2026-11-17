@@ -642,6 +642,18 @@ export const migrations: Migration[] = [
       db.exec(`UPDATE alerts SET notified_at = CURRENT_TIMESTAMP`);
     },
   },
+  {
+    version: 16,
+    name: 'transaction follow-up and scrape batches',
+    up(db) {
+      db.exec(`
+        ALTER TABLE transactions ADD COLUMN follow_up INTEGER NOT NULL DEFAULT 0 CHECK (follow_up IN (0, 1));
+        CREATE TABLE scrape_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, finished_at TEXT);
+        ALTER TABLE transactions ADD COLUMN scrape_batch_id INTEGER REFERENCES scrape_batches(id);
+        CREATE INDEX idx_transactions_scrape_batch ON transactions(scrape_batch_id);
+      `);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';

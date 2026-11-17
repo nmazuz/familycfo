@@ -1,0 +1,159 @@
+{
+  "name": "category mapper",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "category",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1184,
+        432
+      ],
+      "id": "category-mapper-node-1",
+      "name": "Webhook1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -224,
+        432
+      ],
+      "id": "category-mapper-node-2",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=### תפקיד\nאתה מסווג עסקאות פיננסיות של משק בית בישראל (הכנסות והוצאות) לפי תיאור העסקה כפי שמופיע בדו״ח הבנק או כרטיס האשראי.\n\n### הוראות\n- בחר **קטגוריה אחת בלבד** מתוך הרשימה למטה.\n- הרשימה בנויה כ״קטגוריית אב > תת-קטגוריה״. החזר **רק את השם שאחרי ״>״** (תת-הקטגוריה). אם אין ״>״ — החזר את השם כולו.\n- העתק את השם בדיוק כפי שהוא כתוב ברשימה.\n- השתמש בכיוון העסקה: הכנסה → קטגוריה מתוך ״הכנסות״ (או ״השקעות וחסכונות״ אם זו משיכה מחיסכון). הוצאה → לא מתוך ״הכנסות״.\n- אם התיאור לא ברור, בחר את הקטגוריה הסבירה ביותר. אם באמת אין דרך לדעת — החזר ״לא ידוע״.\n- החזר **אך ורק** את שם הקטגוריה, בלי הסברים, מרכאות, סימני פיסוק או עיצוב.\n\n### העסקה\nתיאור: {{ $json.chatInput }}\nסכום: {{ $json.amount }} ({{ $json.direction }})\n\n### קטגוריות זמינות (אב > תת)\n{{ $json.categoriesText }}\n",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "output the category of this transaction"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -592,
+        432
+      ],
+      "id": "category-mapper-node-3",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "chatInput",
+              "value": "={{ $json.body.description }}",
+              "type": "string"
+            },
+            {
+              "name": "amount",
+              "value": "={{ $json.body.amount ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "name": "direction",
+              "value": "={{ $json.body.direction === 'income' ? 'הכנסה' : 'הוצאה' }}",
+              "type": "string"
+            },
+            {
+              "name": "categoriesText",
+              "value": "={{ $json.body.categoriesText || \"אופנה ביגוד והנעלה\\nאחר > כרטיסים נטענים\\nאחר > לא ידוע\\nאחר > קניות בחול\\nביטוחים\\nבילוי ומסעדות > אוכל מהיר\\nבילוי ומסעדות > מסעדות ובילויים\\nבעלי חיים\\nבריאות\\nהכנסות > דיבידנדים\\nהכנסות > העברות חיצוניות\\nהכנסות > משכורת\\nהכנסות > עסק\\nהלוואות ומשכנתא\\nהעברות כספים\\nהשקעות וחסכונות > חסכון חודשי\\nהשקעות וחסכונות > תיק השקעות\\nחינוך ומשפחה > בתי ספר וגנים\\nחינוך ומשפחה > חוגים\\nחינוך ומשפחה > תרבות ופנאי\\nחשבונות > אינטרנט\\nחשבונות > ארנונה\\nחשבונות > גז\\nחשבונות > ועד בית\\nחשבונות > חשמל\\nחשבונות > טלויזיה ובידור\\nחשבונות > מים\\nחשבונות > סלולר\\nחשמל ואלקטרוניקה\\nמזומן\\nמזון וטואלטיקה > חד פעמי\\nמזון וטואלטיקה > סופרמרקט\\nמזון וטואלטיקה > פארם\\nמזון וטואלטיקה > פירות וירקות\\nמיסים, דוחות ועמלות > עמלות אשראי\\nמיסים, דוחות ועמלות > עמלות בנק\\nמיסים, דוחות ועמלות > תשלום דוחות\\nמנויים ושירותים דיגיטליים\\nנופש\\nספורט וטיפוח > מנוי כושר\\nספורט וטיפוח > מספרה\\nספורט וטיפוח > קוסמטיקה ואביזרי טיפוח\\nרכב ותחבורה > ביטוח רכב\\nרכב ותחבורה > דלק וחשמל\\nרכב ותחבורה > הלוואת רכב\\nרכב ותחבורה > חניונים\\nרכב ותחבורה > תחבורה ציבורית\\nרכב ותחבורה > תחזוקת רכב\\nשיפוץ, תחזוקה וריהוט הבית > ניקיון\\nשיפוץ, תחזוקה וריהוט הבית > ריהוט\\nשיפוץ, תחזוקה וריהוט הבית > שיפוץ ואביזרים לבית\\nשיפוץ, תחזוקה וריהוט הבית > תיקונים\\nתרומות ומתנות > מתנות ואירועים\\nתרומות ומתנות > תרומה\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -928,
+        432
+      ],
+      "id": "category-mapper-node-4",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        640
+      ],
+      "id": "category-mapper-node-5",
+      "name": "Google Gemini Chat Model1"
+    }
+  ],
+  "connections": {
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "active": false
+}

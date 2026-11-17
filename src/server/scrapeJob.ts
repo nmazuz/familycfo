@@ -97,7 +97,7 @@ export async function startScrape(db: DB, opts: StartOptions = {}): Promise<Scra
     state.status = 'pipeline';
     const newIds = results.flatMap(r => r.newTransactionIds);
     state.newTransactions = newIds.length;
-    await runPipeline(db, { txIds: newIds, categoryApiUrl });
+    await runPipeline(db, { txIds: [...new Set([...newIds, ...results.flatMap(r => r.updatedTransactionIds)])], categoryApiUrl });
     state.status = results.some(r => r.success) ? 'done' : 'failed';
     if (state.status === 'failed') state.error = 'no bank was scraped';
   })().catch(err => {

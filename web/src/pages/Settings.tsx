@@ -5,8 +5,9 @@ import { api, type Rule } from '../api';
 import { useLookups } from '../state';
 import { day } from '../format';
 import {
-  BellRing, CalendarClock, Coins, KeyRound, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Tags, Users, Wallet, Wand2, X,
+  BellRing, CalendarClock, Coins, KeyRound, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Smartphone, Tags, Users, Wallet, Wand2, X,
 } from 'lucide-react';
+import { MobileConnection } from '../components/MobileConnection';
 import { desktop } from '../desktop';
 import { BankLoginsEditor, LOGINS_SUBTITLE, SCHEDULE_SUBTITLE, ScrapeScheduleForm } from '../components/BankLogins';
 import { AccountSelect, CategorySelect, MemberSelect, PageHeader } from '../components/ui';
@@ -66,6 +67,10 @@ export default function Settings() {
               onBlur={e => saveSettings.mutate({ balance_buffer: e.target.value })} />
           </label>
         </div>
+      </Section>
+
+      <Section title="חיבור לנייד" icon={Smartphone} color="var(--chart-5)">
+        <MobileConnection />
       </Section>
 
       <Section id="members" title="בני הבית" icon={Users} color="var(--chart-6)" subtitle="השמות והצבעים שמופיעים בכל האפליקציה. ״משותף״ הוא ברירת המחדל לחשבונות ותנועות של כל הבית.">

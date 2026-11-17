@@ -111,6 +111,7 @@ export interface ScrapeSummary {
   company: string;
   success: boolean;
   newTransactionIds: number[];
+  updatedTransactionIds: number[];
   errorType?: string;
 }
 
@@ -132,12 +133,16 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
   const browser = await findBrowser();
   if (!browser) throw new Error(NO_BROWSER);
 
+  const batchId = opts.checkOnly ? null : Number(db.prepare('INSERT INTO scrape_batches DEFAULT VALUES').run().lastInsertRowid);
+  const assignBatch = db.prepare('UPDATE transactions SET scrape_batch_id = ? WHERE id = ?');
   for (const account of config.accounts) {
     if (only && !only.includes(account.companyId)) continue;
     console.log(`Scraping ${account.companyId}...`);
     hooks.onProgress?.({ type: 'start', company: account.companyId });
     const startedAt = new Date().toISOString();
     let pageStateAtClose: string | undefined;
+    const newIds: number[] = [];
+    const updatedIds: number[] = [];
 
     try {
       const scraper = createScraper({
@@ -230,36 +235,41 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
         if (pageStateAtClose) console.error(pageStateAtClose);
         if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
           errorType: result.errorType, errorMessage: result.errorMessage });
-        summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: result.errorType });
+        summaries.push({ company: account.companyId, success: false, newTransactionIds: [], updatedTransactionIds: [], errorType: result.errorType });
         hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
           errorType: result.errorType, errorMessage: result.errorMessage });
         continue;
       }
 
-      const newIds: number[] = [];
       if (opts.checkOnly) {
         console.log(`  ${account.companyId}: login OK`);
-        summaries.push({ company: account.companyId, success: true, newTransactionIds: [] });
+        summaries.push({ company: account.companyId, success: true, newTransactionIds: [], updatedTransactionIds: [] });
         hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: 0 });
         continue;
       }
       for (const acc of result.accounts ?? []) {
-        const saved = saveScrapedAccount(db, account.companyId, acc);
+        const saved = db.transaction(() => {
+          const result = saveScrapedAccount(db, account.companyId, acc);
+          for (const id of result.insertedIds) assignBatch.run(batchId, id);
+          return result;
+        })();
         newIds.push(...saved.insertedIds);
+        updatedIds.push(...saved.updatedIds);
         const label = acc.savingsAccount ? ' (savings deposit)' : '';
         console.log(`  ${saved.accountId}${label}: balance ${acc.balance ?? '-'} ${acc.currency ?? 'ILS'}, ${saved.insertedIds.length} new, ${saved.updated} updated`);
       }
       recordScrapeRun(db, { company: account.companyId, startedAt, success: true, newTransactions: newIds.length });
-      summaries.push({ company: account.companyId, success: true, newTransactionIds: newIds });
+      summaries.push({ company: account.companyId, success: true, newTransactionIds: newIds, updatedTransactionIds: updatedIds });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: newIds.length });
     } catch (err) {
       console.error(`Error scraping ${account.companyId}:`, err);
       if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
-        errorType: 'EXCEPTION', errorMessage: String(err) });
-      summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: 'EXCEPTION' });
-      hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
+        errorType: 'EXCEPTION', errorMessage: String(err), newTransactions: newIds.length });
+      summaries.push({ company: account.companyId, success: false, newTransactionIds: newIds, updatedTransactionIds: updatedIds, errorType: 'EXCEPTION' });
+      hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: newIds.length,
         errorType: 'EXCEPTION', errorMessage: err instanceof Error ? err.message : String(err) });
     }
   }
+  if (batchId != null) db.prepare('UPDATE scrape_batches SET finished_at = CURRENT_TIMESTAMP WHERE id = ?').run(batchId);
   return summaries;
 }

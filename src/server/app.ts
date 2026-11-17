@@ -10,6 +10,7 @@ import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { investmentRoutes } from './routes/investments.js';
 import { setRate } from '../analytics/fx.js';
+import { mobileRoutes } from './mobile.js';
 
 import { localOnly, serveWeb } from './web.js';
 import { emitAppEvent } from './appEvents.js';
@@ -27,6 +28,7 @@ export interface ServerOptions {
 export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): FastifyInstance {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'warn' } });
   localOnly(app);
+  mobileRoutes(app, opts.webDist);
 
   registerCrud(app, db, { table: 'members', path: 'members', columns: ['name', 'color'], allowDelete: false });
   registerCrud(app, db, {
