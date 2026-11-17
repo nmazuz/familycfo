@@ -5,8 +5,10 @@ import { api, type Rule } from '../api';
 import { useLookups } from '../state';
 import { day } from '../format';
 import {
-  CalendarClock, Coins, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Tags, Users, Wallet, Wand2, X,
+  BellRing, CalendarClock, Coins, KeyRound, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Tags, Users, Wallet, Wand2, X,
 } from 'lucide-react';
+import { desktop } from '../desktop';
+import { BankLoginsEditor, LOGINS_SUBTITLE, SCHEDULE_SUBTITLE, ScrapeScheduleForm } from '../components/BankLogins';
 import { AccountSelect, CategorySelect, MemberSelect, PageHeader } from '../components/ui';
 
 interface SyncRow { company: string; startedAt: string; success: number; errorType: string | null; errorMessage: string | null; newTransactions: number; lastSuccess: string | null }
@@ -140,6 +142,18 @@ export default function Settings() {
           <button className="btn" disabled={!newTag.trim()} onClick={() => { create.mutate({ path: '/tags', body: { name: newTag.trim() } }); setNewTag(''); }}><Plus />הוסף</button>
         </div>
       </Section>
+
+      {desktop && (
+        <Section id="bank-logins" title="חשבונות בנק וכרטיסי אשראי" icon={KeyRound} color="var(--chart-2)" subtitle={LOGINS_SUBTITLE}>
+          <BankLoginsEditor />
+        </Section>
+      )}
+      {desktop && (
+        <Section id="schedule" title="סריקה אוטומטית והתראות" icon={BellRing} color="var(--chart-3)" subtitle={SCHEDULE_SUBTITLE}>
+          <ScrapeScheduleForm settings={meta.settings} save={b => saveSettings.mutate(b)} />
+          <p className="mt-3 text-xs text-zinc-500">FamilyCFO {desktop.version} · <Link className="underline" to="/welcome">אשף ההגדרה</Link></p>
+        </Section>
+      )}
 
       <Section title="מצב סריקות" icon={RefreshCw} color="var(--chart-7)">
         <div className="scroll-x card-bleed"><table className="table">

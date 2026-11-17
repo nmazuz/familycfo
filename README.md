@@ -1,5 +1,11 @@
 # FamilyCFO
 
+[![Latest release](https://img.shields.io/github/v/release/nmazuz/familycfo?label=release)](https://github.com/nmazuz/familycfo/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nmazuz/familycfo/total?label=downloads)](https://github.com/nmazuz/familycfo/releases)
+[![Stars](https://img.shields.io/github/stars/nmazuz/familycfo?style=flat)](https://github.com/nmazuz/familycfo/stargazers)
+[![License: MIT](https://img.shields.io/github/license/nmazuz/familycfo)](LICENSE)
+[![desktop](https://github.com/nmazuz/familycfo/actions/workflows/desktop.yml/badge.svg)](https://github.com/nmazuz/familycfo/actions/workflows/desktop.yml)
+
 **The CFO of your family — local-first, Hebrew, open source.** Every shekel, policy, pension and stock in one place;
 it sees what's coming, warns before there's a problem, and answers your questions about it.
 

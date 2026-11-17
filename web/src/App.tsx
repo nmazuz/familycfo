@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
@@ -26,6 +26,9 @@ import Pension from './pages/Pension';
 import Investments from './pages/Investments';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
+import { desktop, useDesktopNavigation } from './desktop';
+import { MasterPasswordDialog } from './components/MasterPassword';
+import Welcome from './pages/Welcome';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/kit/tooltip';
 import { MemberAvatar } from '@/lib/visuals';
 import { cn } from '@/lib/utils';
@@ -120,6 +123,10 @@ function AlertsBell({ unseen }: { unseen: number }) {
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
+  useDesktopNavigation();
+  const { data: meta } = useMeta();
+  // the desktop app's first run: the setup wizard until it is finished or skipped
+  const needsOnboarding = !!desktop && !!meta && meta.settings.onboarding_done !== '1';
   const isTabletUp = useMediaQuery('(min-width: 768px)');
   const isRail = useMediaQuery('(min-width: 768px) and (max-width: 1023px)');
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -237,6 +244,7 @@ export default function App() {
             </span>
             <div className="hidden min-w-0 flex-1 md:block"><FilterBar /></div>
             <div className="ms-auto flex shrink-0 items-center gap-1">
+              <MasterPasswordDialog />
               <AgentChat />
               <AlertsBell unseen={unseen} />
             </div>
@@ -247,6 +255,7 @@ export default function App() {
         <main className="mx-auto w-full max-w-[92rem] px-4 pb-16 pt-5 sm:px-6 md:pt-7 lg:px-8 lg:pt-8">
           {/* CSS entry (backwards fill) leaves no transform behind, so fixed children stay viewport-relative */}
           <div key={pathname} className="animate-page-in">
+            {needsOnboarding && pathname !== '/welcome' && <Navigate to="/welcome" replace />}
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/transactions" element={<Transactions />} />
@@ -264,6 +273,7 @@ export default function App() {
               <Route path="/loans" element={<Loans />} />
               <Route path="/categories" element={<Categories />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/welcome" element={<Welcome />} />
             </Routes>
           </div>
         </main>

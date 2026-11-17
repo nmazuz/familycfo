@@ -244,6 +244,8 @@ export interface InsuranceOverview {
 }
 /** The scrape started from the UI (one at a time). */
 export interface ScrapeJob {
+  /** check = the desktop app checking one login (log in only, nothing saved) */
+  mode: 'scrape' | 'check';
   status: 'idle' | 'running' | 'pipeline' | 'done' | 'failed'; startedAt: string | null; finishedAt: string | null;
   companies: { company: string; status: 'pending' | 'running' | 'done' | 'failed'; newTransactions: number; error: string | null }[];
   /** the bank is waiting for an OTP code */

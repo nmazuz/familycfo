@@ -633,6 +633,15 @@ export const migrations: Migration[] = [
       for (const [from, to] of Object.entries(SCRAPER_CATEGORY_ALIASES)) alias.run(from, to);
     },
   },
+  {
+    version: 15,
+    name: 'alerts: when the desktop app showed them as a notification',
+    up(db) {
+      db.exec(`ALTER TABLE alerts ADD COLUMN notified_at TEXT`);
+      // the alerts that already exist were seen in the app; only new ones become notifications
+      db.exec(`UPDATE alerts SET notified_at = CURRENT_TIMESTAMP`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';

@@ -1,11 +1,12 @@
 import { spawn } from 'child_process';
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../db/connection.js';
 import { cycleStartDay, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
+import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
 
 /**
  * The data chat: each message runs the user's own Claude Code (`claude -p`, their subscription) with
@@ -13,8 +14,7 @@ import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
  * answer back as server-sent events. A conversation continues with `--resume <sessionId>`.
  */
 
-const ROOT = resolve('.');
-const AGENT_DIR = join(ROOT, 'agent');
+const AGENT_DIR = join(APP_DIR, 'agent');
 // outside the repo, so the project's files, settings and CLAUDE.md aren't part of the agent's context
 const WORKDIR = join(tmpdir(), 'household-agent');
 
@@ -57,7 +57,9 @@ function syncAgentFiles(): void {
     else mkdirSync(join(docs, name));
   }
 
-  const guard = `${JSON.stringify(process.execPath)} ${JSON.stringify(join(ROOT, 'src', 'agent', 'guard-read.mjs'))} ${JSON.stringify(docs)}`;
+  // in the desktop app process.execPath is Electron's binary: it runs the script as plain Node because claude (and so
+  // its hooks) inherits ELECTRON_RUN_AS_NODE=1 from claudeEnv()
+  const guard = `${JSON.stringify(process.execPath)} ${JSON.stringify(join(APP_DIR, 'src', 'agent', 'guard-read.mjs'))} ${JSON.stringify(docs)}`;
   writeFileSync(join(WORKDIR, '.claude', 'settings.json'), JSON.stringify({
     hooks: { PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: guard }] }] },
   }, null, 2));
@@ -70,11 +72,22 @@ function claudeEnv(): NodeJS.ProcessEnv {
   // the API may itself be started from a Claude Code session
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
+  // the desktop app: the Read hook runs Electron's binary as Node (claude itself is not Electron, it ignores this)
+  if (IN_DESKTOP) env.ELECTRON_RUN_AS_NODE = '1';
   return env;
+}
+
+/** The read-only MCP server: from source with tsx, or (desktop app) the bundled build/desktop/mcp.mjs run by Electron's Node. */
+function mcpCommand(): { command: string; args: string[] } {
+  if (process.env.HOUSEHOLD_MCP_SCRIPT) return { command: process.execPath, args: [process.env.HOUSEHOLD_MCP_SCRIPT] };
+  return { command: join(APP_DIR, 'node_modules', '.bin', 'tsx'), args: [join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
 }
 
 export function agentRoutes(app: FastifyInstance, db: DB): void {
   app.post('/api/agent/chat', async (req, reply) => {
+    // the port this server actually listens on (the desktop app may pick a free one)
+    const address = app.server.address();
+    const apiPort = typeof address === 'object' && address ? address.port : Number(process.env.PORT ?? 4310);
     const { message, sessionId } = (req.body ?? {}) as { message?: string; sessionId?: string };
     if (!message?.trim()) return reply.code(400).send({ error: 'message is required' });
     if (sessionId && !/^[\w-]{8,64}$/.test(sessionId)) return reply.code(400).send({ error: 'bad sessionId' });
@@ -84,11 +97,11 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
     const mcpConfig = {
       mcpServers: {
         household: {
-          command: join(ROOT, 'node_modules', '.bin', 'tsx'),
-          args: [join(ROOT, 'src', 'agent', 'mcp.ts')],
+          ...mcpCommand(),
           env: {
-            BANK_DB: resolve(process.env.BANK_DB ?? 'bank.db'),
-            HOUSEHOLD_API: `http://127.0.0.1:${process.env.PORT ?? 4310}`,
+            ...(IN_DESKTOP ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+            BANK_DB: process.env.BANK_DB || dataPath('bank.db'),
+            HOUSEHOLD_API: `http://127.0.0.1:${apiPort}`,
           },
         },
       },
@@ -105,7 +118,7 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
       '--system-prompt', systemPrompt(db),
       ...(sessionId ? ['--resume', sessionId] : []),
     ];
-    const child = spawn('claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(process.env.CLAUDE_PATH || 'claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
     child.stdin.end(message);
 
     reply.hijack();
@@ -141,7 +154,7 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
     });
     child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
     child.on('error', err => {
-      emit({ type: 'done', error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'Claude Code (claude) is not installed or not on PATH' : err.message });
+      emit({ type: 'done', error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'Claude Code (claude) is not installed or not on PATH — install it and sign in (claude), then restart the app' : err.message });
       finished = true;
       reply.raw.end();
     });

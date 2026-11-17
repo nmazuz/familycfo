@@ -3,6 +3,8 @@ import { scrapeAll } from '../scraper.js';
 import { runPipeline } from '../pipeline.js';
 // reads the bank credentials file; the credentials go only to the scraper and are never returned by the API
 import { loadConfig } from '../config.js';
+import { emitAppEvent } from './appEvents.js';
+import { findBrowser, NO_BROWSER } from '../browser.js';
 
 /**
  * One scrape at a time, started from the UI: all banks, then the pipeline. The bank's OTP screen
@@ -16,6 +18,8 @@ export interface ScrapeCompanyState {
   error: string | null;
 }
 export interface ScrapeJobState {
+  /** check = the desktop app checks a login it just saved: log in only, nothing saved */
+  mode: 'scrape' | 'check';
   status: 'idle' | 'running' | 'pipeline' | 'done' | 'failed';
   startedAt: string | null;
   finishedAt: string | null;
@@ -26,7 +30,7 @@ export interface ScrapeJobState {
   error: string | null;
 }
 
-const idle = (): ScrapeJobState => ({ status: 'idle', startedAt: null, finishedAt: null, companies: [], otp: null, newTransactions: 0, error: null });
+const idle = (): ScrapeJobState => ({ mode: 'scrape', status: 'idle', startedAt: null, finishedAt: null, companies: [], otp: null, newTransactions: 0, error: null });
 let state: ScrapeJobState = idle();
 let answerOtp: ((code: string) => void) | null = null;
 
@@ -43,26 +47,37 @@ const setCompany = (company: string, patch: Partial<ScrapeCompanyState>) => {
   state.companies = state.companies.map(c => (c.company === company ? { ...c, ...patch } : c));
 };
 
-export function startScrape(db: DB): ScrapeJobState {
+export interface StartOptions { loginIds?: string[]; checkOnly?: boolean; showBrowser?: boolean }
+
+export async function startScrape(db: DB, opts: StartOptions = {}): Promise<ScrapeJobState> {
   if (scrapeRunning()) throw Object.assign(new Error('a scrape is already running'), { statusCode: 409 });
-  let config: ReturnType<typeof loadConfig>;
+  // before the logins are decrypted: without a browser there is nothing to use them for
+  if (!(await findBrowser())) throw Object.assign(new Error(NO_BROWSER), { statusCode: 400 });
+  let config: Awaited<ReturnType<typeof loadConfig>>;
   try {
-    config = loadConfig();
+    config = await loadConfig(opts.loginIds);
   } catch {
-    throw Object.assign(new Error('the scraper configuration is missing or invalid (see accounts.example.json)'), { statusCode: 400 });
+    throw Object.assign(new Error('the bank logins are missing or invalid (accounts.json, or the desktop app\'s bank accounts)'), { statusCode: 400 });
   }
+  // checked again: another start may have come in while the logins were read
+  if (scrapeRunning()) throw Object.assign(new Error('a scrape is already running'), { statusCode: 409 });
   const only = process.env.SCRAPE_ONLY?.split(',').map(s => s.trim()).filter(Boolean);
   state = {
-    ...idle(), status: 'running', startedAt: new Date().toISOString(),
+    ...idle(), mode: opts.checkOnly ? 'check' : 'scrape', status: 'running', startedAt: new Date().toISOString(),
     companies: config.accounts.filter(a => !only || only.includes(a.companyId))
       .map(a => ({ company: a.companyId, status: 'pending', newTransactions: 0, error: null })),
   };
+  emitAppEvent({ type: 'scrape-start', mode: state.mode });
+  const categoryApiUrl = config.categoryApiUrl
+    || (db.prepare(`SELECT value FROM settings WHERE key = 'category_api_url'`).pluck().get() as string | undefined) || undefined;
 
   (async () => {
     const results = await scrapeAll(config, db, {
+      showBrowser: opts.showBrowser,
       requestOtp: company => new Promise<string>(resolve => {
         answerOtp = resolve;
         state.otp = { company, requestedAt: new Date().toISOString() };
+        emitAppEvent({ type: 'otp', company });
       }),
       onProgress: event => {
         if (event.type === 'start') setCompany(event.company, { status: 'running' });
@@ -74,11 +89,15 @@ export function startScrape(db: DB): ScrapeJobState {
             : { status: 'failed', error: event.errorMessage || event.errorType || 'error' });
         }
       },
-    });
+    }, { checkOnly: opts.checkOnly });
+    if (opts.checkOnly) {
+      state.status = results.every(r => r.success) ? 'done' : 'failed';
+      return;
+    }
     state.status = 'pipeline';
     const newIds = results.flatMap(r => r.newTransactionIds);
     state.newTransactions = newIds.length;
-    await runPipeline(db, { txIds: newIds, categoryApiUrl: config.categoryApiUrl });
+    await runPipeline(db, { txIds: newIds, categoryApiUrl });
     state.status = results.some(r => r.success) ? 'done' : 'failed';
     if (state.status === 'failed') state.error = 'no bank was scraped';
   })().catch(err => {
@@ -88,6 +107,10 @@ export function startScrape(db: DB): ScrapeJobState {
   }).finally(() => {
     clearOtp();
     state.finishedAt = new Date().toISOString();
+    emitAppEvent({
+      type: 'scrape-end', mode: state.mode, status: state.status === 'done' ? 'done' : 'failed', newTransactions: state.newTransactions,
+      failed: state.companies.filter(c => c.status === 'failed').map(c => c.company), error: state.error,
+    });
   });
 
   return state;

@@ -4,7 +4,7 @@ import { runPipeline } from './pipeline.js';
 import { getDb } from './db/connection.js';
 import { loadConfig } from './config.js';
 
-const config = loadConfig();
+const config = await loadConfig();
 
 async function run(cfg: Config): Promise<void> {
   const db = getDb();
