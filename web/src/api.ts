@@ -20,6 +20,7 @@ export interface Tx {
   effectiveDate: string; description: string; merchant: string; amount: number; personalAmount: number; businessAmount: number;
   kind: string; categoryId: number | null; categoryName: string | null; categoryParentId?: number | null; categoryParentName?: string | null; fixed: boolean; memberId: number; businessId: number | null;
   status: string | null; txnType: string | null; installmentNumber: number | null; installmentTotal: number | null;
+  followUp: boolean; scrapeBatchId: number | null;
   tagIds: number[]; paybackTotal: number; linkedInflow: boolean; categorySource: string | null; notes: string | null; excluded?: boolean;
   matchedTxnId?: number | null; settledByTxnId?: number | null;
   /** the other side of an immediate card charge (bank "ויזה" row ↔ card purchase) */
@@ -246,6 +247,7 @@ export interface InsuranceOverview {
 export interface ScrapeJob {
   /** check = the desktop app checking one login (log in only, nothing saved) */
   mode: 'scrape' | 'check';
+  latestBatch: { id: number; newTransactions: number; finishedAt: string | null } | null;
   status: 'idle' | 'running' | 'pipeline' | 'done' | 'failed'; startedAt: string | null; finishedAt: string | null;
   companies: { company: string; status: 'pending' | 'running' | 'done' | 'failed'; newTransactions: number; error: string | null }[];
   /** the bank is waiting for an OTP code */

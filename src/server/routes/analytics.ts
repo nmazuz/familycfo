@@ -170,6 +170,12 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
   // the scrape started from the UI: progress, and the bank's OTP request
   app.get('/api/scrape', async () => ({
     ...scrapeState(),
+    latestBatch: (() => {
+      const row = db.prepare(`SELECT b.id, b.finished_at AS finishedAt,
+        (SELECT COUNT(*) FROM transactions WHERE scrape_batch_id = b.id) AS newTransactions
+        FROM scrape_batches b ORDER BY b.id DESC LIMIT 1`).get();
+      return row ?? null;
+    })(),
     lastSuccessAt: db.prepare(`SELECT MAX(finished_at) FROM scrape_runs WHERE success = 1`).pluck().get() as string | null,
   }));
   app.post('/api/scrape', async req => {

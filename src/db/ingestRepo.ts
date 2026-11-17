@@ -5,6 +5,7 @@ import { dateKey, normalizeTransactions, type NormalizedTransaction, type Scrape
 export interface SaveResult {
   insertedIds: number[];
   updated: number;
+  updatedIds: number[];
 }
 
 /**
@@ -44,16 +45,17 @@ export function saveScrapedAccount(db: DB, companyId: string, account: ScrapedAc
 
 export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveResult {
   const byIdentifier = db.prepare(`SELECT id FROM transactions WHERE identifier = ?`).pluck();
+  const existingStatus = db.prepare('SELECT status FROM transactions WHERE id = ?').pluck();
   const legacyMatch = db.prepare(
     `SELECT id FROM transactions WHERE identifier = ? AND bank_identifier IS NULL`
   ).pluck();
   // A pending row that has since completed (completed rows get a reference and a charged amount)
-  const pendingMatch = db.prepare(`
-    SELECT id FROM transactions
-    WHERE account_id = ? AND substr(date, 1, 10) = ? AND description = ? AND original_amount = ?
-      AND (status = 'pending' OR (status IS NULL AND charged_amount = 0)) AND identifier != ?
-    LIMIT 1
-  `).pluck();
+  const pendingRows = db.prepare(`
+    SELECT id, identifier, bank_identifier, date, description, original_amount, original_currency, installment_number
+    FROM transactions WHERE account_id = ?
+      AND (status = 'pending' OR (status IS NULL AND charged_amount = 0))
+    ORDER BY id
+  `);
 
   // Same transaction, different reference: some banks (Hapoalim) renumber the reference between scrapes.
   // Candidates are matched one-to-one, so two identical coffees on the same day stay two rows.
@@ -67,6 +69,7 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
   const updateBankFields = db.prepare(`
     UPDATE transactions SET
       identifier = @identifier, date = @date, processed_date = @processedDate, memo = @memo,
+      description = @description, original_amount = @originalAmount, original_currency = @originalCurrency,
       charged_amount = @chargedAmount, charged_currency = @chargedCurrency, status = @status,
       txn_type = @txnType, installment_number = @installmentNumber,
       installment_total = @installmentTotal, bank_identifier = @bankIdentifier,
@@ -85,9 +88,32 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
 
   const insertedIds: number[] = [];
   let updated = 0;
+  const updatedIds: number[] = [];
 
   const incoming = new Set(txns.map(t => t.identifier));
   const claimed = new Set<number>();
+  const pendingMatch = (t: NormalizedTransaction): number | undefined => {
+    if (t.status === 'pending') return undefined;
+    const candidates = (pendingRows.all(t.accountId) as {
+      id: number; identifier: string; bank_identifier: string | null; date: string; description: string;
+      original_amount: number; original_currency: string; installment_number: number | null;
+    }[]).filter(r => !claimed.has(r.id) && !incoming.has(r.identifier)
+      && r.installment_number === t.installmentNumber);
+    // A stable reference can identify a pending row even when its amount, date or description changes.
+    const refs = candidates.filter(r => t.bankIdentifier && r.bank_identifier === t.bankIdentifier
+      && Math.abs(Date.parse(t.date) - Date.parse(r.date)) <= 7 * 86400_000);
+    if (refs.length === 1) return refs[0].id;
+    const similar = candidates.filter(r => dateKey(r.date) === dateKey(t.date) && r.description === t.description
+      && r.original_currency === t.originalCurrency);
+    const exact = similar.filter(r => r.original_amount === t.originalAmount);
+    if (exact.length) return exact[0].id;
+    // A zero placeholder carries no amount to disambiguate two purchases: leave uncertain matches separate.
+    const zeros = similar.filter(r => r.original_amount === 0);
+    const incomingSimilar = txns.filter(o => o.status !== 'pending' && o.accountId === t.accountId
+      && dateKey(o.date) === dateKey(t.date) && o.description === t.description
+      && o.originalCurrency === t.originalCurrency && o.installmentNumber === t.installmentNumber);
+    return zeros.length === 1 && incomingSimilar.length === 1 ? zeros[0].id : undefined;
+  };
   const fuzzyMatch = (t: NormalizedTransaction): number | undefined => {
     const rows = sameRow.all(t.accountId, dateKey(t.date), t.description, t.chargedAmount, t.installmentNumber ?? 0) as { id: number; identifier: string }[];
     // skip rows another incoming transaction will match by its own identifier
@@ -100,15 +126,16 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
         (byIdentifier.get(t.identifier) as number | undefined) ??
         // rows saved before the migration carry the legacy identifier and no bank reference
         (t.bankIdentifier ? legacyMatch.get(t.legacyIdentifier) as number | undefined : undefined) ??
-        (t.status !== 'pending' && t.chargedAmount !== 0
-          ? pendingMatch.get(t.accountId, dateKey(t.date), t.description, t.originalAmount, t.identifier) as number | undefined
-          : undefined) ??
+        pendingMatch(t) ??
         fuzzyMatch(t);
       if (existingId != null) claimed.add(existingId);
 
       if (existingId != null) {
+        // Overlapping bank windows can still contain an old pending copy after settlement.
+        if (t.status === 'pending' && existingStatus.get(existingId) === 'completed') continue;
         updateBankFields.run({ ...t, id: existingId });
         updated++;
+        updatedIds.push(existingId);
       } else {
         const id = Number(insert.run(t).lastInsertRowid);
         claimed.add(id);
@@ -117,7 +144,7 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
     }
   })();
 
-  return { insertedIds, updated };
+  return { insertedIds, updated, updatedIds };
 }
 
 export function recordScrapeRun(db: DB, run: {

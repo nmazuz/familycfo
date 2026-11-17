@@ -122,7 +122,7 @@ export async function categorizeTransactions(db: DB, txIds: number[], apiUrl?: s
 
   for (const id of txIds) {
     const tx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(id) as TxRow | undefined;
-    if (!tx || tx.category_id != null) continue;
+    if (!tx || tx.category_id != null || tx.category_source === 'manual') continue;
 
     const cached = cache.get(tx.description, tx.id) as number | undefined;
     if (cached) { set.run(cached, 'cache', tx.id); continue; }

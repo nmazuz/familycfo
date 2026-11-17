@@ -269,3 +269,7 @@ bank's terms of use — that's your call. No warranty; see the license.
 ## License
 
 [MIT](LICENSE)
+
+## Mobile access and category workflow
+
+Use **הגדרות → חיבור לנייד** in the desktop app, or `npm run mobile` from source. See [setup and authentication](docs/mobile.md). An importable, sanitized n8n category-mapping workflow is included in [workflows/](workflows/README.md).

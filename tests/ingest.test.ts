@@ -50,7 +50,7 @@ describe('saveTransactions', () => {
       VALUES (?, 'max:1', '2026-09-01T21:00:00.000Z', 'ארומה', -18, 'ILS', -18)`).run(legacy);
 
     const txns = normalizeTransactions('max:1', [scraped({ identifier: 'REF9' })]);
-    expect(saveTransactions(db, txns)).toEqual({ insertedIds: [], updated: 1 });
+    expect(saveTransactions(db, txns)).toMatchObject({ insertedIds: [], updated: 1 });
     const row = db.prepare(`SELECT bank_identifier, processed_date FROM transactions`).get() as Record<string, string>;
     expect(row.bank_identifier).toBe('REF9');
     expect(row.processed_date).toBe('2026-10-02T21:00:00.000Z');

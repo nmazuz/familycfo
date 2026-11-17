@@ -4,6 +4,12 @@ dist/
 # your bank logins — never commit
 accounts.json
 
+# local environment variables may contain tunnel tokens or API keys
+.env
+.env.*
+!.env.example
+!.env.sample
+
 # the database and its backups hold all your financial data
 *.db
 *.db-shm

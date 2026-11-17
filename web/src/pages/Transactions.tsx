@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, CreditCard, EyeOff, Hash, Inbox,
+  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, CreditCard, EyeOff, Flag, Hash, Inbox,
   MoreHorizontal, PenLine, PieChart, PiggyBank, Plus, Receipt, Scale, ShoppingBag, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import { api, qs, type Tx } from '../api';
@@ -46,14 +46,22 @@ export default function Transactions() {
   const [category, setCategory] = useState<number | null>(urlParams.get('category') ? Number(urlParams.get('category')) : null);
   const [account, setAccount] = useState<string | null>(urlParams.get('account'));
   const [kind, setKind] = useState(urlParams.get('kind') ?? '');
+  const [followUp, setFollowUp] = useState(urlParams.get('followUp') === '1');
+  const [showZero, setShowZero] = useState(urlParams.get('showZero') === '1');
+  const [scrapeBatch, setScrapeBatch] = useState<string | null>(urlParams.get('scrapeBatch'));
   const [review, setReview] = useState(urlParams.get('review') === '1');
   // a card statement (from clicking an upcoming card charge): that card's rows charged in that month
   const [charge, setCharge] = useState<string | null>(urlParams.get('charge'));
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'date', dir: -1 });
+  const [hideCardPayments, setHideCardPayments] = useState(urlParams.get('hideCardPayments') !== '0');
   // keep the URL in sync so the filtered view can be bookmarked or opened again with Back
   useEffect(() => {
     const next = new URLSearchParams();
-    if (cycle) next.set('cycle', cycle);
+    next.set('cycle', cycle);
+    if (followUp) next.set('followUp', '1');
+    if (showZero) next.set('showZero', '1');
+    if (scrapeBatch) next.set('scrapeBatch', scrapeBatch);
+    if (!hideCardPayments) next.set('hideCardPayments', '0');
     if (search) next.set('search', search);
     if (category != null) next.set('category', String(category));
     if (account) next.set('account', account);
@@ -61,8 +69,7 @@ export default function Transactions() {
     if (review) next.set('review', '1');
     if (charge) next.set('charge', charge);
     setUrlParams(next, { replace: true });
-  }, [cycle, search, category, account, kind, review, charge, setUrlParams]);
-  const [hideCardPayments, setHideCardPayments] = useState(true);
+  }, [cycle, search, category, account, kind, review, charge, followUp, showZero, scrapeBatch, hideCardPayments, setUrlParams]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<Tx | null>(null);
   const [showCategories, setShowCategories] = useState(false);
@@ -70,7 +77,11 @@ export default function Transactions() {
   const [manual, setManual] = useState<Tx | 'new' | null>(null);
   const [suggestRule, setSuggestRule] = useState<{ tx: Tx; patch: Record<string, unknown>; count: number } | null>(null);
 
-  const query = { ...params, cycle: review ? undefined : cycle || undefined, search, category, account, kind, review: review ? 1 : undefined, charge: charge ?? undefined, hideCardPayments: hideCardPayments ? 1 : undefined, limit: 1000 };
+  const query = {
+    ...params, search, category, account, kind, cycle: review ? undefined : cycle || undefined,
+    followUp: followUp ? 1 : undefined, showZero: showZero ? 1 : undefined, scrapeBatch: scrapeBatch ?? undefined,
+    review: review ? 1 : undefined, charge: charge ?? undefined, hideCardPayments: hideCardPayments ? 1 : undefined, limit: 1000,
+  };
   const { data, isLoading, error } = useQuery({ queryKey: ['transactions', query], queryFn: () => api.get<TxPage>(`/transactions${qs(query)}`) });
 
   const invalidate = () => {
@@ -180,7 +191,11 @@ export default function Transactions() {
         </Modal>
       )}
 
-      <div className="card mb-4 grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-3 md:p-4 lg:grid-cols-6">
+      {scrapeBatch && <div className="card mb-4 flex items-center justify-between gap-2 text-sm">
+        <span>תנועות שנוספו בסריקה #{scrapeBatch}</span>
+        <button className="btn-ghost" onClick={() => setScrapeBatch(null)}>הצג את כל התנועות</button>
+      </div>}
+      <div className="card mb-4 grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-3 md:p-4 lg:grid-cols-5">
         {charge ? (
           <div className="input flex items-center justify-between gap-2 border-brand-200 bg-brand-50 py-0 pe-1 text-brand-800 dark:border-brand-700/60 dark:bg-brand-700/20 dark:text-brand-100">
             <span className="truncate">חיוב של {day(charge)}</span>
@@ -193,7 +208,9 @@ export default function Transactions() {
         <CategorySelect value={category} onChange={setCategory} />
         <AccountSelect value={account} onChange={setAccount} emptyLabel="כל החשבונות" />
         <Picker className="input max-sm:col-span-2" value={kind} onChange={v => setKind(v ?? '')} options={kindFilterOptions} placeholder="כל הסוגים" searchable={false} />
-        <div className="col-span-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-fg-muted sm:col-span-1 sm:flex-col sm:items-start sm:justify-center sm:gap-1.5">
+        <div className="col-span-full flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-fg-muted">
+          <label className="flex min-h-8 items-center gap-2 max-sm:min-h-10"><input type="checkbox" checked={followUp} onChange={e => { setFollowUp(e.target.checked); if (e.target.checked) setCycle(''); }} /> רק למעקב</label>
+          <label className="flex min-h-8 items-center gap-2 max-sm:min-h-10"><input type="checkbox" checked={showZero} onChange={e => setShowZero(e.target.checked)} /> הצג תנועות בסכום אפס</label>
           <label className="flex min-h-8 items-center gap-2 max-sm:min-h-10"><input type="checkbox" checked={review} onChange={e => setReview(e.target.checked)} /> רק ללא קטגוריה</label>
           <label className="flex min-h-8 items-center gap-2 max-sm:min-h-10" title="שורות ״ויזה״/״כאל״ בבנק שמשלמות עסקאות שכבר מופיעות בכרטיס">
             <input type="checkbox" checked={hideCardPayments} onChange={e => setHideCardPayments(e.target.checked)} /> הסתר תשלומי כרטיס
@@ -210,11 +227,14 @@ export default function Transactions() {
           <Picker className="input w-36 max-sm:w-[calc(50%-0.25rem)]" value="" options={tagOptions} placeholder="+ תגית"
             onChange={v => v && bulk.mutate({ addTagIds: [Number(v)] })} />
           <NewTagInput placeholder="תגית חדשה + Enter" onCreated={t => bulk.mutate({ addTagIds: [t.id] })} />
+          <button className="btn" onClick={() => bulk.mutate({ followUp: 1 })}><Flag />סמן למעקב</button>
+          <button className="btn" onClick={() => bulk.mutate({ followUp: 0 })}>סיום מעקב</button>
           <button className="btn" onClick={() => bulk.mutate({ excluded: 1 })}><EyeOff />הסתר מהחישובים</button>
           <button className="btn-ghost" onClick={() => setSelected(new Set())}>ביטול</button>
         </div>
       )}
 
+      {(patch.error || bulk.error) && <ErrorBox error={patch.error || bulk.error} />}
       {isLoading ? <Loading /> : error ? <ErrorBox error={error} /> : rows.length === 0 ? (charge ? (
         <Empty>
           אין עדיין פירוט של החיוב הזה — הכרטיס לא דיווח אילו עסקאות ייכנסו לחיוב של {day(charge)} (הסכום בתחזית הוא הערכה לפי חיובים קודמים).
@@ -246,13 +266,21 @@ export default function Transactions() {
                     {t.processedDate !== t.date && t.accountKind === 'card' && <div className="text-[11px]">חיוב {day(t.processedDate)}</div>}
                   </td>
                   <td>
-                    <div className="w-32 truncate font-medium sm:w-auto sm:max-w-72">{t.description}</div>
+                    <div className="flex items-center gap-1">
+                      <button className={`btn-ghost btn-icon shrink-0 ${t.followUp ? 'text-amber-600' : 'text-muted-foreground'}`}
+                        aria-label={t.followUp ? 'סיום מעקב' : 'סמן למעקב'} aria-pressed={t.followUp}
+                        disabled={patch.isPending} onClick={() => patch.mutate({ id: t.id, body: { followUp: !t.followUp } })}>
+                        <Flag className={t.followUp ? 'fill-current' : ''} />
+                      </button>
+                      <div className="w-32 truncate font-medium sm:w-auto sm:max-w-72">{t.description}</div>
+                    </div>
                     <div className="mt-0.5 flex w-32 flex-wrap items-center gap-1 text-[11px] text-zinc-500 empty:hidden sm:w-auto sm:max-w-72 max-sm:[&_.chip]:whitespace-normal">
                       {t.accountKind === 'manual' && <span className="chip gap-1" title="הוזן ידנית — לא מופיע באף חשבון או כרטיס"><PenLine className="h-3 w-3" />ידני</span>}
                       {t.kind !== 'expense' && <span className="chip">{KIND_LABELS[t.kind] ?? t.kind}</span>}
                       {t.link && t.matchedTxnId && <span className="chip" title="השורה בבנק היא החיוב של עסקה בכרטיס — נספרת פעם אחת">↔ חיוב מיידי של {t.link.description}</span>}
                       {t.link && t.settledByTxnId && <span className="chip" title="העסקה חויבה מיד מחשבון הבנק ולא בחיוב החודשי">↔ חויב מיידית מ{t.link.account} ב-{day(t.link.date)}</span>}
                       {t.installmentTotal && <span className="chip">תשלום {t.installmentNumber}/{t.installmentTotal}</span>}
+                      {t.followUp && <span className="chip text-amber-700 dark:text-amber-300">למעקב</span>}
                       {t.status === 'pending' && <span className="chip">ממתין</span>}
                       {t.fixed && <span className="chip">קבוע</span>}
                       {t.paybackTotal > 0 && <span className="chip">הוחזרו <Money value={t.paybackTotal} /></span>}
@@ -321,7 +349,7 @@ function TxDrawer({ tx, onClose, onSave }: { tx: Tx; onClose: () => void; onSave
   const [form, setForm] = useState({
     categoryId: tx.categoryId, memberId: tx.memberId, businessId: tx.businessId,
     businessSharePct: tx.businessId ? Math.round((tx.businessAmount / (tx.amount || 1)) * 100) : 100,
-    kind: tx.kind, fixedOverride: tx.fixed ? 1 : 0, excluded: tx.excluded ? 1 : 0, notes: tx.notes ?? '', tagIds: tx.tagIds,
+    followUp: tx.followUp ? 1 : 0, kind: tx.kind, fixedOverride: tx.fixed ? 1 : 0, excluded: tx.excluded ? 1 : 0, notes: tx.notes ?? '', tagIds: tx.tagIds,
   });
   const set = (patch: Partial<typeof form>) => setForm(f => ({ ...f, ...patch }));
   return (
@@ -350,6 +378,7 @@ function TxDrawer({ tx, onClose, onSave }: { tx: Tx; onClose: () => void; onSave
       <Field label="תגיות"><TagPicker value={form.tagIds} onChange={tagIds => set({ tagIds })} /></Field>
       <Field label="הערות"><textarea className="input" rows={2} value={form.notes} onChange={e => set({ notes: e.target.value })} /></Field>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+        <label className="flex min-h-8 items-center gap-2"><input type="checkbox" checked={!!form.followUp} onChange={e => set({ followUp: e.target.checked ? 1 : 0 })} /> דורש טיפול ומעקב</label>
         <label className="flex min-h-8 items-center gap-2"><input type="checkbox" checked={!!form.fixedOverride} onChange={e => set({ fixedOverride: e.target.checked ? 1 : 0 })} /> הוצאה קבועה</label>
         <label className="flex min-h-8 items-center gap-2"><input type="checkbox" checked={!!form.excluded} onChange={e => set({ excluded: e.target.checked ? 1 : 0 })} /> הסתר מהחישובים</label>
       </div>

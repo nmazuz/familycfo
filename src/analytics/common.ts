@@ -47,6 +47,8 @@ export interface Tx {
   linkedInflow: boolean;
   categorySource: string | null;
   notes: string | null;
+  followUp: boolean;
+  scrapeBatchId: number | null;
   /** bank row → the card purchase it settles (immediate debit) */
   matchedTxnId: number | null;
   /** card purchase → the bank row that already charged it (immediate debit) */
@@ -185,6 +187,8 @@ export function loadTransactions(db: DB, opts: LoadOptions = {}): Tx[] {
       linkedInflow: linkedInflows.has(r.id),
       categorySource: r.category_source,
       notes: r.notes,
+      followUp: !!r.follow_up,
+      scrapeBatchId: r.scrape_batch_id ?? null,
       matchedTxnId: r.matched_txn_id ?? null,
       settledByTxnId: settledBy.get(r.id) ?? null,
       accountIsDebit: !!r.is_debit,

@@ -7,7 +7,9 @@ running it.
 
 - It is meant to run on **one trusted computer**, for the people who live with that data. The API binds to
   `127.0.0.1` and has **no authentication** — anything that can reach that port can read everything. Don't expose it
-  through a reverse proxy, a tunnel, port forwarding, or a `0.0.0.0` bind.
+  directly through a reverse proxy, a tunnel, port forwarding, or a `0.0.0.0` bind. For optional phone access, use
+  **Settings → Mobile connection**, which puts a separate authenticated gateway in front of the local API. See
+  [mobile access](docs/mobile.md) for access codes, expiration, Cloudflare routing and Named Tunnel configuration.
 - Bank logins are read from `accounts.json` (git-ignored). Treat that file like a password vault: keep the computer's
   disk encrypted and its user account locked. Where your bank supports it, use a read-only / viewing user for scraping.
 - `bank.db`, `backups/` and `data/` hold the data itself — keep them out of git, cloud-synced folders you share, and
